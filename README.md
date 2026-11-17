@@ -5,7 +5,7 @@ Development environment for **Ask the Institute**, the Ascend AI NOW™ Institut
 ## Live build and presentation
 
 - **Try the live build:** [ask-the-institute-dev.netlify.app](https://ask-the-institute-dev.netlify.app/)
-- **Presentation (PDF, 17 slides):** [Ask the Institute: Privacy-First Guardrails for Ascend K-12 Artificial Intelligence (AI) Governance](docs/Ask-the-Institute-Demo-Deck.pdf), presented to the BWIAI™ NVIDIA Test Kitchen cohort, November 17, 2026
+- **Presentation (PDF, 18 slides):** [Ask the Institute: Privacy-First Guardrails for Ascend K-12 Artificial Intelligence (AI) Governance](docs/Ask-the-Institute-Demo-Deck.pdf), presented to the BWIAI™ NVIDIA Test Kitchen cohort, November 17, 2026
 
 The presentation walks through the work in chronological order: validating the Week 3 combined guardrails notebook on a Brev A100, resolving a GPU runtime error, adapting the design for Ask the Institute, the hosted Content Safety outage and the fallback added in response, the live results on Netlify, the crisis-resources response with its optional staff alert, and supportive responses in English and Spanish.
 
@@ -85,16 +85,22 @@ A topic applies only when a rail blocks the question, so policy questions such a
 
 The hosted `nvidia/gliner-pii` endpoint reached end of life in July 2026, so remote deployments cannot call it. This build uses a pattern-based PII screen as a stand-in. It catches structured identifiers reliably but cannot detect names on their own. For full entity detection, run the GLiNER PII NIM locally on an x86_64 machine (for example, a Brev GPU node) as shown in the Week 3 notebook. GLiNER does not run on Apple Silicon Macs.
 
+## K-12 data and records requests
+
+- **Credentials:** the PII screen also stops passwords, student ID numbers and lunch PINs (English and Spanish) before any model call. Policy questions such as "What password policy should our district require?" are not flagged.
+- **FERPA records requests:** a request to give, reset or look up another person's grades, password, schedule or records (for example, "I'm Jordan's mom, can you tell me her grades?") is redirected to the school office or parent portal. The assistant has no access to student records.
+
 ## Files
 
 | Path | Purpose |
 |---|---|
-| `index.html` | Dev test page (marked DEVELOPMENT, not indexed by search engines), with the 4 cohort test scenarios |
+| `index.html` | Dev test page (marked DEVELOPMENT, not indexed by search engines), with 5 test scenarios, including a FERPA records request |
 | `netlify/functions/ask.mjs` | The guardrails and answering function |
 | `netlify/functions/alert-test.mjs` | Scheduled monthly test of each configured alert channel |
 | `lib/support.mjs` | Support resources (English and Spanish), topic detection, and language detection |
 | `netlify/functions/ping.mjs` | Health check: shows whether the NVIDIA key is set (never its value) and which models each rail uses |
-| `tests/ask.test.mjs` | 44 automated tests with simulated NVIDIA responses (`npm test`), including the notebook's 4 scenarios, the safety endpoint fallback, supportive responses in English and Spanish, and both alert channels |
+| `tests/ask.test.mjs` | 50 automated tests with simulated NVIDIA responses (`npm test`), including the notebook's 4 scenarios, the safety endpoint fallback, supportive responses in English and Spanish, both alert channels, K-12 credential detection and the FERPA redirect |
+| `scripts/k12-eval.mjs` | 25 labeled K-12 cases scored by group, in the style of the NVIDIA customer service cookbook. Latest live result: 24 of 25 ([results](docs/k12-eval-results.md)) |
 | `scripts/eval.mjs` | Live batch evaluation against the real NVIDIA API (`npm run eval`), like the notebook's Batch Evaluation cell |
 | `netlify.toml` | Netlify settings for this dev site |
 | `.env.example` | Template for local testing; copy to `.env` (never commit `.env`) |
@@ -114,6 +120,7 @@ Optional settings, changeable without code: `NVIDIA_SAFETY_MODEL`, `NVIDIA_CHAT_
 ```
 npm test                                   # simulated, no API key needed
 NVIDIA_API_KEY="nvapi-..." npm run eval     # live, against NVIDIA hosted models
+ASK_URL="https://ask-the-institute-dev.netlify.app/.netlify/functions/ask" node scripts/k12-eval.mjs   # 25 K-12 cases
 ```
 
 Expected live result:
