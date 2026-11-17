@@ -231,6 +231,31 @@ export function detectPII(text) {
   return found;
 }
 
+// Removes detected identifiers so the person can review the question and ask again without retyping it.
+// Names are not detected by the pattern screen, so the page asks the person to remove names themselves.
+const REDACT_LABELS = { ssn: "[SSN removed]", email: "[email removed]", phone_number: "[phone removed]", date_of_birth: "[date of birth removed]",
+  card_number: "[card number removed]", street_address: "[address removed]", password: "[password removed]", student_id: "[student ID removed]", lunch_pin: "[lunch PIN removed]" };
+const REDACT_LABELS_ES = { ssn: "[SSN eliminado]", email: "[correo eliminado]", phone_number: "[teléfono eliminado]", date_of_birth: "[fecha de nacimiento eliminada]",
+  card_number: "[número de tarjeta eliminado]", street_address: "[dirección eliminada]", password: "[contraseña eliminada]", student_id: "[ID de estudiante eliminado]", lunch_pin: "[PIN del almuerzo eliminado]" };
+export function redactPII(text, lang = "en") {
+  const labels = lang === "es" ? REDACT_LABELS_ES : REDACT_LABELS;
+  let out = String(text || "");
+  for (let pass = 0; pass < 3; pass++) {
+    for (const p of PII_PATTERNS) {
+      const g = new RegExp(p.re.source, p.re.flags.includes("g") ? p.re.flags : p.re.flags + "g");
+      out = out.replace(g, (...args) => {
+        const m = args.slice(0, -2);
+        if (p.allow && p.allow(m)) return m[0];
+        if (p.check && !p.check(m)) return m[0];
+        const tail = (m[0].match(/[,.;:!?]+$/) || [""])[0];
+        return (labels[p.type] || "[removed]") + tail;
+      });
+    }
+    if (!detectPII(out).length) break;
+  }
+  return detectPII(out).length ? "" : out;
+}
+
 // ---------- Safety verdict parser ----------
 // The content safety model replies in plain text, for example:
 //   User Safety: unsafe
@@ -374,7 +399,10 @@ export async function handler(req, deps = {}) {
     // Rail 1: PII on input (first, so identifiers never reach any model)
     const pii = detectPII(question);
     checks.push({ rail: "pii_input", decision: pii.length ? "block" : "allow", entities: pii });
-    if (pii.length) return blocked("pii", pii);
+    if (pii.length) {
+      const redacted = redactPII(question, lang);
+      return json(200, { ok: true, blocked: "pii", answer: msg("pii"), categories: pii, checks, lang, ...(redacted ? { redacted } : {}) });
+    }
 
     // Rail 1b: FERPA records request (another person's grades, password, schedule): redirected, never sent to a model
     const records = isRecordsRequest(question);
