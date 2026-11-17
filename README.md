@@ -88,6 +88,7 @@ The hosted `nvidia/gliner-pii` endpoint reached end of life in July 2026, so rem
 ## K-12 data and records requests
 
 - **Credentials:** the PII screen also stops passwords, student ID numbers and lunch PINs (English and Spanish) before any model call. Policy questions such as "What password policy should our district require?" are not flagged.
+- **Remove my personal details and ask again:** when the PII screen blocks a question, the page offers a button that removes the detected identifiers (labeled, for example, `[SSN removed]`) and returns the question to the box. Nothing is sent until the person reads it, removes any names (which the pattern screen cannot detect), and presses Ask the Institute again. This saves retyping and teaches the proper habit. The identifiers themselves are never sent back to the page or to any model.
 - **FERPA records requests:** a request to give, reset or look up another person's grades, password, schedule or records (for example, "I'm Jordan's mom, can you tell me her grades?") is redirected to the school office or parent portal. The assistant has no access to student records.
 
 ## Files
@@ -99,7 +100,7 @@ The hosted `nvidia/gliner-pii` endpoint reached end of life in July 2026, so rem
 | `netlify/functions/alert-test.mjs` | Scheduled monthly test of each configured alert channel |
 | `lib/support.mjs` | Support resources (English and Spanish), topic detection, and language detection |
 | `netlify/functions/ping.mjs` | Health check: shows whether the NVIDIA key is set (never its value) and which models each rail uses |
-| `tests/ask.test.mjs` | 50 automated tests with simulated NVIDIA responses (`npm test`), including the notebook's 4 scenarios, the safety endpoint fallback, supportive responses in English and Spanish, both alert channels, K-12 credential detection and the FERPA redirect |
+| `tests/ask.test.mjs` | 54 automated tests with simulated NVIDIA responses (`npm test`), including the notebook's 4 scenarios, the safety endpoint fallback, supportive responses in English and Spanish, both alert channels, K-12 credential detection, the FERPA redirect and the remove-and-ask-again button |
 | `scripts/k12-eval.mjs` | 25 labeled K-12 cases scored by group, in the style of the NVIDIA customer service cookbook. Latest live result: 24 of 25 ([results](docs/k12-eval-results.md)) |
 | `scripts/eval.mjs` | Live batch evaluation against the real NVIDIA API (`npm run eval`), like the notebook's Batch Evaluation cell |
 | `netlify.toml` | Netlify settings for this dev site |

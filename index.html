@@ -38,6 +38,7 @@
 .lang-btn[aria-pressed="true"]{background:#0E2865;color:#fff;border-color:#0E2865}
 .notice{background:#FFF8EC;border:1px solid #F3D9A8;border-radius:10px;padding:10px 14px;font-size:14px;line-height:1.5;color:#4A3B1F;margin:6px 0 4px}
 @media (max-width:760px){.rails{grid-template-columns:1fr 1fr}}
+.redact-btn{background:#fff;color:#14213D;border:2px solid #14213D;border-radius:999px;padding:10px 20px;font-weight:700;cursor:pointer;font-family:inherit;font-size:16px}.redact-btn:hover,.redact-btn:focus{background:#14213D;color:#fff}.redact-note{font-weight:600}
 </style>
 </head>
 <body>
@@ -114,9 +115,11 @@
   function count(){ cnt.textContent=q.value.length+" / 600"; }
   var TXT={
     en:{notice:"Questions are screened for safety. If a question suggests that someone may be in danger, this assistant shows support resources, and a district that has connected an alert channel may notify a counselor or safety team. Alerts never include your question or your name. Please do not include personal information.",
-        ph:"Type your AI governance question. Please do not include personal, student, or confidential information.", ref:"Reference"},
+        ph:"Type your AI governance question. Please do not include personal, student, or confidential information.", ref:"Reference",
+        fix:"Remove my personal details and ask again", fixed:"We removed the personal numbers from your question below. Please read it, also remove any names or other personal details, then press Ask the Institute."},
     es:{notice:"Las preguntas se revisan por seguridad. Si una pregunta sugiere que alguien podría estar en peligro, este asistente muestra recursos de apoyo, y un distrito que haya conectado un canal de alertas puede avisar a un consejero o al equipo de seguridad. Las alertas nunca incluyen su pregunta ni su nombre. No incluya información personal.",
-        ph:"Escriba su pregunta sobre la gobernanza de la inteligencia artificial. No incluya información personal, de estudiantes ni confidencial.", ref:"Referencia"}
+        ph:"Escriba su pregunta sobre la gobernanza de la inteligencia artificial. No incluya información personal, de estudiantes ni confidencial.", ref:"Referencia",
+        fix:"Eliminar mis datos personales y preguntar de nuevo", fixed:"Eliminamos los números personales de su pregunta. Léala, elimine también cualquier nombre u otro dato personal y luego presione Ask the Institute."}
   };
   var lang=((navigator.language||"en").toLowerCase().indexOf("es")===0)?"es":"en";
   function setLang(l){ lang=l; document.getElementById("askNotice").textContent=TXT[l].notice; q.placeholder=TXT[l].ph;
@@ -155,7 +158,13 @@
           show("care",'<div lang="'+esc(sp.lang||"en")+'"><p class="care-title">'+esc(sp.title)+'</p><p>'+esc(sp.message)+'</p><ul class="care-list">'+items+'</ul><p>'+esc(sp.trusted)+'</p><p class="care-ref">'+esc((TXT[sp.lang]||TXT.en).ref)+' '+esc(d.reference||"")+'</p></div>');
         } else if(d.blocked){
           var cats=d.categories&&d.categories.length?": "+d.categories.join(", "):"";
-          show("flag",'<div class="ask-badge flag">'+esc((BLOCKED[d.blocked]||"Blocked")+cats)+"</div><p>"+esc(d.answer)+"</p>"+trace(d.checks));
+          var T=TXT[d.lang]||TXT[lang]||TXT.en;
+          var fixBtn=(d.blocked==="pii"&&d.redacted)?'<p><button type="button" class="btn redact-btn" id="redactBtn">'+esc(T.fix)+'</button></p>':"";
+          show("flag",'<div class="ask-badge flag">'+esc((BLOCKED[d.blocked]||"Blocked")+cats)+"</div><p>"+esc(d.answer)+"</p>"+fixBtn+trace(d.checks));
+          if(fixBtn){ var rb=document.getElementById("redactBtn"); rb.addEventListener("click",function(){
+            q.value=d.redacted; count(); q.focus(); q.setSelectionRange(0,0); q.scrollTop=0;
+            show("flag",'<p class="redact-note">'+esc(T.fixed)+'</p>');
+          }); }
         } else {
           show("good",'<div class="ask-badge">All 5 guardrails passed</div>'+
             esc(d.answer).split(/\n{2,}/).map(function(p){ return "<p>"+p.replace(/\n/g,"<br>")+"</p>"; }).join("")+trace(d.checks));
