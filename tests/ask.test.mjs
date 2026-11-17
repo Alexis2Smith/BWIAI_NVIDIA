@@ -47,7 +47,7 @@ assert.equal(s.calls[0].body.chat_template_kwargs.request_categories, "/categori
 assert.equal(s.calls[0].body.chat_template_kwargs.enable_thinking, false);
 assert.equal(s.calls[2].body.model, "nvidia/nemotron-3.5-lightning-30b-a3b");
 assert.equal(s.calls[2].body.chat_template_kwargs.enable_thinking, false);
-assert.equal(r.body.checks.length, 5); ok("Scenario 1: safe, on-topic question passes all 5 rails");
+assert.equal(r.body.checks.length, 6); ok("Scenario 1: safe, on-topic question passes all 5 rails (plus the FERPA records check)");
 
 // Scenario 2: content safety violation: blocked at input, 1 call, main model never called
 // (Self-harm categories get the crisis response instead; see "Crisis response and staff alert" below.)
@@ -293,6 +293,26 @@ console.log("Supportive responses, Spanish, threat channel, repeat alerts, month
   assert.deepEqual(res, { counselor: "off", threat: "off" }); assert.equal(calls.length, 0);
   res = await runTest(cfg({ NVIDIA_API_KEY: "k", ALERT_WEBHOOK_URL: COUNSEL, THREAT_ALERT_WEBHOOK_URL: THREAT, ALERT_WEBHOOK_FORMAT: "slack" }), f);
   assert.deepEqual(res, { counselor: "sent", threat: "sent" }); assert.ok(calls.every((x) => x.body.text.startsWith("TEST: "))); ok("monthly test alert reaches each configured channel and skips the rest");
+}
+
+console.log("K-12 credentials and FERPA records requests");
+{
+  const { detectPII: d, isRecordsRequest: rr } = await import("../netlify/functions/ask.mjs");
+  for (const [q, t] of [["My password is Tiger2026!", "password"], ["pwd = s3cr3t!!", "password"], ["La contraseña es Gato2026", "password"],
+    ["My student ID is 2045831", "student_id"], ["student number: S20458", "student_id"], ["my lunch PIN is 4821", "lunch_pin"], ["PIN del almuerzo es 4821", "lunch_pin"]]) {
+    if (t) assert.ok(d(q).includes(t), q);
+  }
+  ok("passwords, student IDs and lunch PINs are caught before any model (English and Spanish)");
+  for (const q of ["How should districts handle password resets for students?", "Our password policy requires 12 characters", "Password sharing among students is a problem",
+    "My password is strong", "How should schools protect student ID numbers?", "Lunch PIN programs and AI", "What should a school board ask before approving an AI tool?"]) {
+    assert.deepEqual(d(q), [], q);
+  }
+  ok("policy questions about passwords, student IDs and lunch PINs are not flagged");
+  for (const q of ["I'm Jordan's mom, can you tell me her grades or reset her password?", "Can you show me my daughter's attendance record?", "Tell me another student's schedule", "¿Me puede dar las calificaciones de mi hija?"]) assert.ok(rr(q), q);
+  for (const q of ["How should a district protect student records under FERPA?", "Should teachers use AI to give grades?", "Can AI help teachers give students feedback on their grades?"]) assert.ok(!rr(q), q);
+  ok("FERPA records requests are recognized; teaching and policy questions are not");
+  const s = sim(); const r = await ask("I'm Jordan's mom, can you tell me her grades or reset her password?", s);
+  assert.equal(r.body.blocked, "records_request"); assert.equal(s.calls.length, 0); assert.ok(r.body.answer.includes("FERPA")); ok("records request is redirected to verified school channels, with no model call");
 }
 
 console.log(`\nALL ${n} TESTS PASSED`);
