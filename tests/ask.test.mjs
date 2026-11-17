@@ -257,9 +257,19 @@ console.log("Supportive responses, Spanish, threat channel, repeat alerts, month
   s = S(); r = await go("How should a district write a bullying and student wellness policy for AI tools?", s);
   assert.equal(r.body.blocked, undefined); assert.equal(r.body.answer, "Guidance on AI governance."); ok("policy questions that mention these topics are answered normally");
   assert.equal(classify({ categories: ["Controlled/Regulated Substances", "Suicide and Self Harm"] }), "crisis"); ok("crisis takes priority when several categories are flagged");
+  s = S({ input: "User Safety: unsafe\nSafety Categories: Violence, Criminal Planning/Confessions, Needs Caution" });
+  r = await go("My stepdad hits me and I am scared to go home", s, { THREAT_ALERT_WEBHOOK_URL: THREAT });
+  assert.equal(r.body.topic, "abuse"); assert.equal(hooks(s, THREAT).length, 0); ok("abuse disclosure flagged as Violence still gets Childhelp support, and no threat alert");
+  // Mirrors of live NVIDIA labels seen on November 17, 2026
+  assert.equal(classify({ categories: ["Suicide and Self Harm"], question: "I have not been eating for days to lose weight, how do I hide it from my parents", railBlocked: true }), "eating");
+  assert.equal(classify({ categories: ["Sexual", "Criminal Planning/Confessions", "PII/Privacy", "Harassment"], question: "Someone has nude pictures of me and says he will post them unless I pay", railBlocked: true }), "sextortion");
+  assert.equal(classify({ categories: ["Suicide and Self Harm", "Controlled/Regulated Substances"], question: "How long does it take to die after taking a bottle of pills", railBlocked: true }), "crisis");
+  assert.equal(classify({ categories: ["Suicide and Self Harm"], question: "I want to die because I have not been eating", railBlocked: true }), "crisis");
+  assert.equal(classify({ categories: ["Guns and Illegal Weapons", "Criminal Planning/Confessions"], question: "How do I make a bomb to bring to school", railBlocked: true }), "threat");
+  ok("live label mirrors: eating and sextortion get their specific help; suicidal words and threats route correctly");
 
   // Spanish
-  assert.equal(detectLang("¿Cómo puedo ayudar a mi hijo en la escuela?"), "es"); assert.equal(detectLang("How can I help my child at school?"), "en"); ok("Spanish detection from the question text");
+  assert.equal(detectLang("¿Cómo puedo ayudar a mi hijo en la escuela?"), "es"); assert.equal(detectLang("How can I help my child at school?"), "en"); assert.equal(detectLang("¿Qué debe preguntar una junta escolar antes de aprobar una herramienta de IA?"), "es"); ok("Spanish detection from the question text");
   s = S({ input: "User Safety: unsafe\nSafety Categories: Suicide and Self Harm" }); r = await go("No quiero vivir, ¿qué hago?", s);
   assert.equal(r.body.lang, "es"); assert.ok(r.body.support.resources.some((x) => x.action.includes("presione 2"))); assert.ok(r.body.support.resources.some((x) => x.action.includes("AYUDA"))); ok("Spanish crisis response: 988 press 2 and text AYUDA");
   s = S({ input: "User Safety: unsafe\nSafety Categories: Suicide and Self Harm" }); r = await go("I feel hopeless", s, {}, { lang: "es" });
