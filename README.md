@@ -46,6 +46,23 @@ Live test on the Brev node (safety falls back to the local NIM, answers come fro
 NVIDIA_SAFETY_FALLBACK_URL=http://localhost:8123/v1 node scripts/eval.mjs
 ```
 
+### Crisis response and optional staff alert
+
+When a safety rail flags the **Suicide and Self Harm** category, in a question or in a drafted answer, the person no longer sees the ordinary "please rephrase" message. They see a caring response with crisis resources: the 988 Suicide and Crisis Lifeline (call or text 988), 988 online chat, Crisis Text Line (text HOME to 741741), findahelpline.com for other countries, and emergency services. This is always on.
+
+A district can also connect its own crisis-response channel. The alert is **off until `ALERT_WEBHOOK_URL` is set**.
+
+| Setting | Purpose |
+|---|---|
+| `ALERT_WEBHOOK_URL` | An https webhook for the district's Teams, Slack, email, or ticketing channel. Non-https addresses are ignored. |
+| `ALERT_WEBHOOK_FORMAT` | `teams`, `slack`, or `json` (default `json`). |
+| `ALERT_SITE_LABEL` | The school or site name shown in the alert. |
+
+- The alert contains only: event type, category, which rail flagged it, site label, time, and a random reference ID. It never includes the question text, names, IP addresses, or any credential.
+- The person sees the crisis resources immediately. On Netlify the alert is sent after the reply, and a failed or slow alert (3 second limit) never changes what the person sees.
+- The reference ID is shown to the person and included in the alert, so staff can connect the two if the person later comes forward.
+- This site is anonymous, so an alert says that a concern occurred and where, not who. Identifying a user requires district sign-in, with FERPA, consent, and privacy-notice obligations, and alerts should route into the district's existing crisis protocol with a named responder.
+
 ### About the PII rail
 
 The hosted `nvidia/gliner-pii` endpoint reached end of life in July 2026, so remote deployments cannot call it. This build uses a pattern-based PII screen as a stand-in. It catches structured identifiers reliably but cannot detect names on their own. For full entity detection, run the GLiNER PII NIM locally on an x86_64 machine (for example, a Brev GPU node) as shown in the Week 3 notebook. GLiNER does not run on Apple Silicon Macs.
@@ -57,7 +74,7 @@ The hosted `nvidia/gliner-pii` endpoint reached end of life in July 2026, so rem
 | `index.html` | Dev test page (marked DEVELOPMENT, not indexed by search engines), with the 4 cohort test scenarios |
 | `netlify/functions/ask.mjs` | The guardrails and answering function |
 | `netlify/functions/ping.mjs` | Health check: shows whether the NVIDIA key is set (never its value) and which models each rail uses |
-| `tests/ask.test.mjs` | 18 automated tests with simulated NVIDIA responses (`npm test`), including the notebook's 4 scenarios and the safety endpoint fallback |
+| `tests/ask.test.mjs` | 27 automated tests with simulated NVIDIA responses (`npm test`), including the notebook's 4 scenarios, the safety endpoint fallback, and the crisis response and staff alert |
 | `scripts/eval.mjs` | Live batch evaluation against the real NVIDIA API (`npm run eval`), like the notebook's Batch Evaluation cell |
 | `netlify.toml` | Netlify settings for this dev site |
 | `.env.example` | Template for local testing; copy to `.env` (never commit `.env`) |

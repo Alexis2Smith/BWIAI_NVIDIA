@@ -26,6 +26,13 @@
 .trace{margin:12px 0 0;padding:0;list-style:none;font-size:13.5px}
 .trace li{display:flex;gap:8px;align-items:center;padding:3px 0}
 .trace .t-ok{color:#1E8E5A;font-weight:700;min-width:46px}.trace .t-no{color:#B42318;font-weight:700;min-width:46px}
+.ask-out.care{background:#F3F6FC;border:2px solid #1E5BD8;border-radius:14px;padding:20px 22px}
+.care-title{font:700 18px Montserrat,system-ui,sans-serif;color:var(--navy,#0E2865);margin:0 0 8px}
+.care-list{list-style:none;margin:14px 0;padding:0;display:grid;gap:10px}
+.care-list li{background:#fff;border:1px solid var(--line,#DCE3F0);border-radius:10px;padding:10px 14px}
+.care-list a{font:700 16px Montserrat,system-ui,sans-serif;color:#1E5BD8}
+.care-list span{display:block;font-size:13.5px;color:var(--muted,#5B6675)}
+.care-ref{font-size:12.5px;color:var(--muted,#5B6675)}
 @media (max-width:760px){.rails{grid-template-columns:1fr 1fr}}
 </style>
 </head>
@@ -116,7 +123,13 @@
       .then(function(r){ return r.json().catch(function(){ return {ok:false}; }); })
       .then(function(d){
         if(!d.ok){ show("bad","<p>"+esc(d.error||"The assistant is unavailable right now. Please try again shortly.")+"</p>"); return; }
-        if(d.blocked){
+        if(d.blocked==="crisis" && d.crisis){
+          var items=(d.crisis.resources||[]).map(function(x){
+            var safe=/^(tel:|sms:|https:)/.test(x.href||"")?x.href:"#";
+            return '<li><a href="'+esc(safe)+'"'+(safe.indexOf("https:")===0?' target="_blank" rel="noopener"':'')+'>'+esc(x.action)+'</a><span>'+esc(x.label)+'</span></li>';
+          }).join("");
+          show("care",'<p class="care-title">You are not alone. Support is available right now.</p><p>'+esc(d.crisis.message)+'</p><ul class="care-list">'+items+'</ul><p>'+esc(d.crisis.school)+'</p><p class="care-ref">Reference '+esc(d.reference||"")+'</p>');
+        } else if(d.blocked){
           var cats=d.categories&&d.categories.length?": "+d.categories.join(", "):"";
           show("flag",'<div class="ask-badge flag">'+esc((BLOCKED[d.blocked]||"Blocked")+cats)+"</div><p>"+esc(d.answer)+"</p>"+trace(d.checks));
         } else {
