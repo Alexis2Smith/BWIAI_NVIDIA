@@ -24,6 +24,15 @@
 //   NVIDIA_SAFETY_FALLBACK_URL  optional  tried only if the first safety endpoint errors (for example, a self-hosted
 //                                         Content Safety NIM such as a Brev node). Must be reachable from Netlify.
 //   NVIDIA_SAFETY_API_KEY       optional  bearer token for a self-hosted safety endpoint, if it requires one.
+//
+// Crisis response and optional staff alert:
+//   When a safety rail flags Suicide and Self Harm, the person sees crisis resources (988 and related help)
+//   instead of the ordinary block message. This always happens and never waits on the alert.
+//   ALERT_WEBHOOK_URL     optional  https webhook for a district's own crisis-response channel. Off when unset.
+//   ALERT_WEBHOOK_FORMAT  optional  "teams", "slack", or "json" (default "json")
+//   ALERT_SITE_LABEL      optional  school or site name shown in the alert
+//   The alert carries only: event, category, rail, site label, time, and a random reference ID. Never the question
+//   text, names, IP addresses, or any credential. Alert failures are logged and never change what the person sees.
 // Key handling: NVIDIA_API_KEY is sent only to NVIDIA-hosted addresses (*.nvidia.com). Any other safety address
 // receives NVIDIA_SAFETY_API_KEY if set, otherwise no Authorization header. The system still fails closed: if every
 // configured safety endpoint fails, no answer is shown.
@@ -45,8 +54,55 @@ export function cfg(source) {
     safetyBase: trim(get("NVIDIA_SAFETY_BASE_URL")) || base,
     safetyFallback: trim(get("NVIDIA_SAFETY_FALLBACK_URL")),
     safetyKey: get("NVIDIA_SAFETY_API_KEY"),
-    topicControl: String(get("TOPIC_CONTROL")).toLowerCase() !== "off"
+    topicControl: String(get("TOPIC_CONTROL")).toLowerCase() !== "off",
+    alertUrl: /^https:\/\//i.test(String(get("ALERT_WEBHOOK_URL")).trim()) ? String(get("ALERT_WEBHOOK_URL")).trim() : "",
+    alertFormat: ["teams", "slack", "json"].includes(String(get("ALERT_WEBHOOK_FORMAT")).toLowerCase()) ? String(get("ALERT_WEBHOOK_FORMAT")).toLowerCase() : "json",
+    alertSite: String(get("ALERT_SITE_LABEL")).trim().slice(0, 80) || "Ask the Institute"
   };
+}
+
+// ---------- Crisis detection, response, and optional staff alert ----------
+export function isCrisis(categories = []) {
+  return categories.some((c) => /suicid|self[\s-]*harm/i.test(String(c)));
+}
+
+export const CRISIS = {
+  message: "It sounds like you may be going through something really difficult, and you do not have to face it alone. If you are thinking about suicide or self-harm, or are worried about someone else, please reach out now. Help is free, confidential, and available 24 hours a day.",
+  resources: [
+    { label: "988 Suicide and Crisis Lifeline (United States)", action: "Call or text 988", href: "tel:988" },
+    { label: "988 Lifeline online chat", action: "Chat at 988lifeline.org", href: "https://988lifeline.org/chat/" },
+    { label: "Crisis Text Line", action: "Text HOME to 741741", href: "sms:741741" },
+    { label: "Outside the United States", action: "Find a local helpline at findahelpline.com", href: "https://findahelpline.com" },
+    { label: "Immediate danger", action: "Call 911 or your local emergency number", href: "tel:911" }
+  ],
+  school: "If you are a student, please also talk with a trusted adult, school counselor, or teacher today."
+};
+
+function alertBody(c, a) {
+  const line = `Ask the Institute safety alert. Category: ${a.category}. Site: ${a.site}. Time: ${a.time}. Reference: ${a.reference}. Follow your district crisis protocol.`;
+  if (c.alertFormat === "slack") return { text: line };
+  if (c.alertFormat === "teams") return { text: line };
+  return a;
+}
+
+// Sends the staff alert if configured. Resolves to "sent", "off", or "failed"; never throws.
+export async function sendAlert(c, alert, fetchImpl, timeoutMs = 3000) {
+  if (!c.alertUrl) return "off";
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetchImpl(c.alertUrl, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(alertBody(c, alert)), signal: ctrl.signal
+    });
+    if (!r.ok) throw new Error("webhook " + r.status);
+    return "sent";
+  } catch (e) {
+    console.error("Safety alert not delivered: " + String(e?.message || e).slice(0, 120));
+    return "failed";
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 // True only for NVIDIA-hosted addresses, so the NVIDIA API key is never sent anywhere else.
@@ -240,6 +296,20 @@ export async function handler(req, deps = {}) {
   const checks = []; // trace of each rail, like the NeMo Guardrails colang history
   const blocked = (rail, categories = []) =>
     json(200, { ok: true, blocked: rail, answer: MESSAGES[rail], categories, checks });
+  // Crisis: caring response with resources; staff alert (if configured) sent alongside, never blocking the reply.
+  const crisis = async (rail, categories) => {
+    const reference = (globalThis.crypto?.randomUUID?.() || String(Date.now())).slice(0, 8).toUpperCase();
+    const alert = { event: "safety_alert", category: "Suicide and Self Harm", rail, site: c.alertSite, time: new Date().toISOString(), reference };
+    let alertStatus = "off";
+    if (c.alertUrl) {
+      const pending = sendAlert(c, alert, fetchImpl);
+      // On Netlify, waitUntil lets the alert finish after the reply is sent, so the person never waits on it.
+      if (typeof deps.context?.waitUntil === "function") { deps.context.waitUntil(pending); alertStatus = "queued"; }
+      else alertStatus = await pending;
+    }
+    checks.push({ rail: "crisis_response", decision: "block", categories, alert: alertStatus });
+    return json(200, { ok: true, blocked: "crisis", answer: CRISIS.message, crisis: CRISIS, categories, reference, checks });
+  };
 
   try {
     // Rail 1: PII on input (first, so identifiers never reach any model)
@@ -251,7 +321,7 @@ export async function handler(req, deps = {}) {
     const { verdict: s1, endpoint: e1 } = await contentSafety(c, question, null, fetchImpl);
     if (!s1) throw new Error("No safety endpoint returned a readable verdict on the question");
     checks.push({ rail: "content_safety_input", decision: s1.user === "unsafe" ? "block" : "allow", categories: s1.categories, endpoint: e1 });
-    if (s1.user === "unsafe") return blocked("content_safety", s1.categories);
+    if (s1.user === "unsafe") return isCrisis(s1.categories) ? crisis("content_safety_input", s1.categories) : blocked("content_safety", s1.categories);
 
     // Rail 3: topic control on input
     if (c.topicControl) {
@@ -275,7 +345,7 @@ export async function handler(req, deps = {}) {
     if (!s2 || !s2.response) throw new Error("No safety endpoint returned a readable verdict on the answer");
     const outBad = s2.response === "unsafe" || s2.user === "unsafe";
     checks.push({ rail: "content_safety_output", decision: outBad ? "block" : "allow", categories: s2.categories, endpoint: e3 });
-    if (outBad) return blocked("output_safety", s2.categories);
+    if (outBad) return isCrisis(s2.categories) ? crisis("content_safety_output", s2.categories) : blocked("output_safety", s2.categories);
 
     // Rail 5: PII on output
     const outPii = detectPII(answer);
@@ -289,4 +359,4 @@ export async function handler(req, deps = {}) {
   }
 }
 
-export default (req) => handler(req);
+export default (req, context) => handler(req, { context });

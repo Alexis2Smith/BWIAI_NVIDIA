@@ -10,8 +10,12 @@ export default () => {
       NVIDIA_API_KEY: Boolean(c.key),
       NVIDIA_SAFETY_BASE_URL: where(c.safetyBase),
       NVIDIA_SAFETY_FALLBACK_URL: where(c.safetyFallback),
-      NVIDIA_SAFETY_API_KEY: Boolean(c.safetyKey)
+      NVIDIA_SAFETY_API_KEY: Boolean(c.safetyKey),
+      ALERT_WEBHOOK_URL: c.alertUrl ? "on" : "off",
+      ALERT_WEBHOOK_FORMAT: c.alertFormat,
+      ALERT_SITE_LABEL: c.alertSite
     },
+    crisis_response: "on (Suicide and Self Harm category shows 988 and related resources)",
     rails: { pii_input: "pattern screen", content_safety: c.safetyModel, topic_control: c.topicControl ? c.safetyModel + " (custom_policy)" : "off", output_safety: c.safetyModel, pii_output: "pattern screen" },
     chat_model: c.chatModel
   }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
