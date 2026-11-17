@@ -2,6 +2,13 @@
 
 Development environment for **Ask the Institute**, the Ascend AI NOW™ Institute's AI governance assistant, built for the **BWIAI™ NVIDIA Test Kitchen**. This repository is separate from the live site (ascendainow.com) so changes can be tested safely before production.
 
+## Live build and presentation
+
+- **Try the live build:** [ask-the-institute-dev.netlify.app](https://ask-the-institute-dev.netlify.app/)
+- **Presentation (PDF, 15 slides):** [Ask the Institute: Privacy-First Guardrails for Ascend K-12 Artificial Intelligence (AI) Governance](docs/Ask-the-Institute-Demo-Deck.pdf), presented to the BWIAI™ NVIDIA Test Kitchen cohort, November 17, 2026
+
+The presentation walks through the work in chronological order: validating the Week 3 combined guardrails notebook on a Brev A100, resolving a GPU runtime error, adapting the design for Ask the Institute, the hosted Content Safety outage and the fallback added in response, and the live results on Netlify.
+
 ## Guardrails
 
 This build follows the NeMo Guardrails **Combined Guardrails** design taught in Week 3 of the Test Kitchen, applied to an AI governance assistant instead of a healthcare chatbot.
