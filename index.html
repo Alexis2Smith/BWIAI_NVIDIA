@@ -116,10 +116,10 @@
   var TXT={
     en:{notice:"Questions are screened for safety. If a question suggests that someone may be in danger, this assistant shows support resources, and a district that has connected an alert channel may notify a counselor or safety team. Alerts never include your question or your name. Please do not include personal information.",
         ph:"Type your AI governance question. Please do not include personal, student, or confidential information.", ref:"Reference",
-        fix:"Remove my personal details and ask again", fixed:"We removed the personal numbers from your question below. Please read it, also remove any names or other personal details, then press Ask the Institute."},
+        fix:"Remove my personal details and ask again", fixed:"We removed the parts of your question that contained personal details. Please read it, remove any names, add back anything you still want to ask (without personal details), then press Ask the Institute."},
     es:{notice:"Las preguntas se revisan por seguridad. Si una pregunta sugiere que alguien podría estar en peligro, este asistente muestra recursos de apoyo, y un distrito que haya conectado un canal de alertas puede avisar a un consejero o al equipo de seguridad. Las alertas nunca incluyen su pregunta ni su nombre. No incluya información personal.",
         ph:"Escriba su pregunta sobre la gobernanza de la inteligencia artificial. No incluya información personal, de estudiantes ni confidencial.", ref:"Referencia",
-        fix:"Eliminar mis datos personales y preguntar de nuevo", fixed:"Eliminamos los números personales de su pregunta. Léala, elimine también cualquier nombre u otro dato personal y luego presione Ask the Institute."}
+        fix:"Eliminar mis datos personales y preguntar de nuevo", fixed:"Eliminamos las partes de su pregunta que contenían datos personales. Léala, elimine cualquier nombre, agregue lo que todavía quiera preguntar (sin datos personales) y luego presione Ask the Institute."}
   };
   var lang=((navigator.language||"en").toLowerCase().indexOf("es")===0)?"es":"en";
   function setLang(l){ lang=l; document.getElementById("askNotice").textContent=TXT[l].notice; q.placeholder=TXT[l].ph;
