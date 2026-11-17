@@ -231,29 +231,20 @@ export function detectPII(text) {
   return found;
 }
 
-// Removes detected identifiers so the person can review the question and ask again without retyping it.
-// Names are not detected by the pattern screen, so the page asks the person to remove names themselves.
-const REDACT_LABELS = { ssn: "[SSN removed]", email: "[email removed]", phone_number: "[phone removed]", date_of_birth: "[date of birth removed]",
-  card_number: "[card number removed]", street_address: "[address removed]", password: "[password removed]", student_id: "[student ID removed]", lunch_pin: "[lunch PIN removed]" };
-const REDACT_LABELS_ES = { ssn: "[SSN eliminado]", email: "[correo eliminado]", phone_number: "[teléfono eliminado]", date_of_birth: "[fecha de nacimiento eliminada]",
-  card_number: "[número de tarjeta eliminado]", street_address: "[dirección eliminada]", password: "[contraseña eliminada]", student_id: "[ID de estudiante eliminado]", lunch_pin: "[PIN del almuerzo eliminado]" };
-export function redactPII(text, lang = "en") {
-  const labels = lang === "es" ? REDACT_LABELS_ES : REDACT_LABELS;
-  let out = String(text || "");
-  for (let pass = 0; pass < 3; pass++) {
-    for (const p of PII_PATTERNS) {
-      const g = new RegExp(p.re.source, p.re.flags.includes("g") ? p.re.flags : p.re.flags + "g");
-      out = out.replace(g, (...args) => {
-        const m = args.slice(0, -2);
-        if (p.allow && p.allow(m)) return m[0];
-        if (p.check && !p.check(m)) return m[0];
-        const tail = (m[0].match(/[,.;:!?]+$/) || [""])[0];
-        return (labels[p.type] || "[removed]") + tail;
-      });
-    }
-    if (!detectPII(out).length) break;
-  }
-  return detectPII(out).length ? "" : out;
+// Builds a cleaned question so the person can ask again without retyping it.
+// Live testing showed that placeholders such as "[SSN removed]" or "[removed]" are themselves flagged by the safety
+// model (PII/Privacy, and once a false Sexual (minor) flag), so the parts that contain identifiers are removed whole:
+// first whole sentences (which also drops a name in the same sentence), then clauses if every sentence has one.
+// The person reviews the result and removes any names before asking again. Returns "" when nothing clean remains.
+export function redactPII(text) {
+  const src = String(text || "").trim();
+  const keep = (parts) => parts.filter((x) => x.trim() && !detectPII(x).length).join(" ").replace(/\s+/g, " ").trim();
+  const sentences = src.match(/[^.!?]+[.!?]*/g) || [];
+  let out = keep(sentences);
+  if (!out) out = keep(src.split(/,|;/).map((x) => x.trim()).filter(Boolean)).replace(/\s+([?.!])/g, "$1");
+  out = out.replace(/^[\s,;:.-]+/, "").replace(/^(and|but|so|y|pero)\s+/i, "");
+  if (!out || detectPII(out).length || !/\p{L}{3,}/u.test(out)) return "";
+  return out.replace(/\p{L}/u, (ch) => ch.toUpperCase());
 }
 
 // ---------- Safety verdict parser ----------
@@ -400,7 +391,7 @@ export async function handler(req, deps = {}) {
     const pii = detectPII(question);
     checks.push({ rail: "pii_input", decision: pii.length ? "block" : "allow", entities: pii });
     if (pii.length) {
-      const redacted = redactPII(question, lang);
+      const redacted = redactPII(question);
       return json(200, { ok: true, blocked: "pii", answer: msg("pii"), categories: pii, checks, lang, ...(redacted ? { redacted } : {}) });
     }
 
