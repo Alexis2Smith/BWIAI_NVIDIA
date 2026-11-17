@@ -50,9 +50,10 @@ assert.equal(s.calls[2].body.chat_template_kwargs.enable_thinking, false);
 assert.equal(r.body.checks.length, 5); ok("Scenario 1: safe, on-topic question passes all 5 rails");
 
 // Scenario 2: content safety violation: blocked at input, 1 call, main model never called
-s = sim({ input: "User Safety: unsafe\nSafety Categories: Suicide and Self Harm" });
+// (Self-harm categories get the crisis response instead; see "Crisis response and staff alert" below.)
+s = sim({ input: "User Safety: unsafe\nSafety Categories: Guns and Illegal Weapons" });
 r = await ask("[harmful request]", s);
-assert.equal(r.body.blocked, "content_safety"); assert.deepEqual(r.body.categories, ["Suicide and Self Harm"]);
+assert.equal(r.body.blocked, "content_safety"); assert.deepEqual(r.body.categories, ["Guns and Illegal Weapons"]);
 assert.equal(kinds(s), "input"); ok("Scenario 2: content safety blocks before the main model");
 
 // Scenario 3: off-topic: content safety passes, topic control blocks, 2 calls
@@ -134,6 +135,71 @@ console.log("Safety endpoint settings");
   s = route({ hostedSafetyDown: true, selfDown: true });
   r = await run(cfg({ NVIDIA_API_KEY: "nvapi-test", NVIDIA_SAFETY_FALLBACK_URL: SELF }), s);
   assert.equal(r.status, 502); assert.equal(s.calls.filter((x) => !x.safety).length, 0); ok("both safety endpoints down: fails closed, answer model never called");
+}
+
+console.log("Crisis response and staff alert");
+{
+  const { cfg, isCrisis, CRISIS } = await import("../netlify/functions/ask.mjs");
+  const Q = "How long does it take to die after taking a bottle of pills";
+  const HOOK = "https://alerts.example-district.org/hook/abc";
+  // Simulator: input safety flags self-harm; records every call (including the webhook)
+  const crisisSim = ({ hookStatus = 200, outputFlag = false, hookHang = false } = {}) => {
+    const calls = [];
+    const fetch = async (u, o) => {
+      calls.push({ url: u, body: o.body });
+      if (u.startsWith(HOOK)) {
+        if (hookHang) return new Promise((_, rej) => o.signal.addEventListener("abort", () => rej(new Error("aborted"))));
+        return new Response("", { status: hookStatus });
+      }
+      const b = JSON.parse(o.body);
+      if (b.model === "nvidia/nemotron-3.5-lightning-30b-a3b") return reply("Here is guidance on AI governance.");
+      if (b.messages.length === 2) return reply(outputFlag ? "User Safety: safe\nResponse Safety: unsafe\nSafety Categories: Suicide and Self Harm" : "User Safety: safe\nResponse Safety: safe");
+      if (b.chat_template_kwargs?.custom_policy) return reply("User Safety: safe");
+      return reply(outputFlag ? "User Safety: safe" : "User Safety: unsafe\nSafety Categories: Suicide and Self Harm");
+    };
+    return { calls, fetch };
+  };
+  const run = async (env, s, q = Q, extra = {}) => {
+    const r = await handler(new Request("https://s/ask", { method: "POST", body: JSON.stringify({ question: q }) }), { fetch: s.fetch, cfg: cfg({ NVIDIA_API_KEY: "nvapi-test", ...env }), ...extra });
+    return { status: r.status, body: await r.json() };
+  };
+
+  assert.ok(isCrisis(["Suicide and Self Harm"])); assert.ok(isCrisis(["self-harm"])); assert.ok(!isCrisis(["Violence", "Hate"])); ok("crisis category detection (and no false match on other categories)");
+
+  let s = crisisSim(), r = await run({}, s);
+  assert.equal(r.body.blocked, "crisis"); assert.equal(r.body.answer, CRISIS.message);
+  assert.ok(r.body.crisis.resources.some((x) => x.action.includes("988")));
+  assert.ok(!r.body.answer.includes("rephrase"));
+  assert.equal(s.calls.filter((x) => x.url.startsWith(HOOK)).length, 0);
+  assert.equal(r.body.checks.at(-1).alert, "off"); ok("self-harm question gets crisis resources (988), not the rephrase message; alert off by default");
+
+  r = await run({ ALERT_WEBHOOK_URL: "http://insecure.example.org/hook" }, crisisSim());
+  assert.equal(r.body.checks.at(-1).alert, "off"); ok("non-https webhook address is ignored");
+
+  s = crisisSim(); r = await run({ ALERT_WEBHOOK_URL: HOOK, ALERT_SITE_LABEL: "Lincoln Middle School" }, s);
+  const hook = s.calls.find((x) => x.url === HOOK); const sent = JSON.parse(hook.body);
+  assert.equal(r.body.checks.at(-1).alert, "sent");
+  assert.equal(sent.event, "safety_alert"); assert.equal(sent.site, "Lincoln Middle School"); assert.equal(sent.reference, r.body.reference);
+  assert.ok(!hook.body.includes("pills") && !hook.body.includes("nvapi")); ok("alert sent when configured; contains no question text and no key");
+
+  s = crisisSim(); r = await run({ ALERT_WEBHOOK_URL: HOOK, ALERT_WEBHOOK_FORMAT: "teams" }, s);
+  assert.ok(JSON.parse(s.calls.find((x) => x.url === HOOK).body).text.startsWith("Ask the Institute safety alert")); ok("Teams and Slack format sends a single text line");
+
+  r = await run({ ALERT_WEBHOOK_URL: HOOK }, crisisSim({ hookStatus: 500 }));
+  assert.equal(r.status, 200); assert.equal(r.body.blocked, "crisis"); assert.equal(r.body.checks.at(-1).alert, "failed");
+  r = await run({ ALERT_WEBHOOK_URL: HOOK }, crisisSim({ hookHang: true }));
+  assert.equal(r.body.blocked, "crisis"); assert.equal(r.body.checks.at(-1).alert, "failed"); ok("webhook error or timeout: person still gets crisis resources");
+
+  const queued = []; s = crisisSim();
+  r = await run({ ALERT_WEBHOOK_URL: HOOK }, s, Q, { context: { waitUntil: (p) => queued.push(p) } });
+  assert.equal(r.body.checks.at(-1).alert, "queued"); assert.equal(queued.length, 1); assert.equal(await queued[0], "sent"); ok("on Netlify the alert finishes after the reply (person never waits)");
+
+  s = crisisSim({ outputFlag: true }); r = await run({}, s, "How should a district respond to student mental health concerns?");
+  assert.equal(r.body.blocked, "crisis"); assert.ok(!JSON.stringify(r.body).includes("Here is guidance")); ok("self-harm flagged in a drafted answer also returns crisis resources");
+
+  const v = sim({ input: "User Safety: unsafe\nSafety Categories: Violence" });
+  const rv = await ask("[violent request]", v);
+  assert.equal(rv.body.blocked, "content_safety"); ok("other harmful categories keep the ordinary block message");
 }
 
 console.log(`\nALL ${n} TESTS PASSED`);
