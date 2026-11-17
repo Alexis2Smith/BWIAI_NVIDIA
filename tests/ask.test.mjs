@@ -315,4 +315,22 @@ console.log("K-12 credentials and FERPA records requests");
   assert.equal(r.body.blocked, "records_request"); assert.equal(s.calls.length, 0); assert.ok(r.body.answer.includes("FERPA")); ok("records request is redirected to verified school channels, with no model call");
 }
 
+console.log("Remove my personal details and ask again");
+{
+  const { redactPII: rd, detectPII: d } = await import("../netlify/functions/ask.mjs");
+  const q = "Hi, I'm Taylor Reed, DOB 03/22/1985, SSN 987-65-4320. Where should our district start with AI governance?";
+  const out = rd(q);
+  assert.deepEqual(d(out), []); assert.ok(out.includes("Where should our district start with AI governance?")); assert.ok(!/987-65-4320|03\/22\/1985/.test(out));
+  ok("detected identifiers are removed and the rest of the question is kept");
+  assert.equal(rd("My daughter's password is Sunshine22, can the school AI see it?"), "My daughter's [password removed], can the school AI see it?");
+  assert.ok(rd("Mi contraseña es Gato2026, ¿es seguro?", "es").includes("[contraseña eliminada]"));
+  ok("removal labels keep punctuation and appear in Spanish for Spanish questions");
+  const s = sim(); const r = await ask(q, s);
+  assert.equal(r.body.blocked, "pii"); assert.equal(s.calls.length, 0); assert.equal(r.body.redacted, out); assert.ok(!JSON.stringify(r.body).includes("987-65-4320"));
+  ok("a PII block returns the cleaned question for review, never the identifiers, and calls no model");
+  const s2 = sim(); const r2 = await ask(out, s2);
+  assert.equal(r2.body.blocked, undefined); assert.ok(r2.body.answer);
+  ok("the cleaned question passes the PII screen and is answered when the person asks again");
+}
+
 console.log(`\nALL ${n} TESTS PASSED`);
