@@ -46,22 +46,40 @@ Live test on the Brev node (safety falls back to the local NIM, answers come fro
 NVIDIA_SAFETY_FALLBACK_URL=http://localhost:8123/v1 node scripts/eval.mjs
 ```
 
-### Crisis response and optional staff alert
+### Supportive responses, language, and staff alerts
 
-When a safety rail flags the **Suicide and Self Harm** category, in a question or in a drafted answer, the person no longer sees the ordinary "please rephrase" message. They see a caring response with crisis resources: the 988 Suicide and Crisis Lifeline (call or text 988), 988 online chat, Crisis Text Line (text HOME to 741741), findahelpline.com for other countries, and emergency services. This is always on.
+When a safety rail blocks a question, the assistant first asks whether the person may need help. Supportive responses are always on, appear in **English or Spanish** (from the page's language switch, or detected from the question), and use resources verified on November 17, 2026. The content lives in `lib/support.mjs` so a district can review it in one place; review it at least once per school year.
 
-A district can also connect its own crisis-response channel. The alert is **off until `ALERT_WEBHOOK_URL` is set**.
+| Concern | What the person sees |
+|---|---|
+| Suicide or self-harm | 988 (call or text; in Spanish, press 2 or text AYUDA to 988; interpretation in 240+ languages), 988 chat, Crisis Text Line, findahelpline.com, 911 |
+| Sextortion or shared images | Take It Down (images taken under 18), NCMEC CyberTipline, 911; "this is not your fault" |
+| Abuse or neglect | Childhelp National Child Abuse Hotline, call (800) 422-4453 or text GO to 800.422.4453; 911 |
+| Eating disorders | National Alliance for Eating Disorders, (866) 662-1235 (weekday support and referral line, labeled as not a crisis line); 988; 911 |
+| Alcohol, vaping, or drugs | SAMHSA National Helpline, 1-800-662-HELP (4357), free, confidential, 24/7, English and Spanish; 911 |
+| Bullying or harassment | Trusted adult, StopBullying.gov, 988, 911 |
+| Violence or weapons | A firm, neutral refusal (no hotline), plus the optional threat-assessment alert |
+
+A topic applies only when a rail blocks the question, so policy questions such as "How should a district handle bullying?" are answered normally. When several concerns are flagged, crisis takes priority.
+
+**Transparency.** The page tells every user, in English and Spanish, that questions are screened, that support resources appear when someone may be in danger, and that a connected district may notify a counselor or safety team without the question or the person's name.
+
+**Staff alerts are off until a district connects its own channels.**
 
 | Setting | Purpose |
 |---|---|
-| `ALERT_WEBHOOK_URL` | An https webhook for the district's Teams, Slack, email, or ticketing channel. Non-https addresses are ignored. |
+| `ALERT_WEBHOOK_URL` | Counselor channel for suicide and self-harm (Teams, Slack, email, or ticketing). https only. |
 | `ALERT_WEBHOOK_FORMAT` | `teams`, `slack`, or `json` (default `json`). |
-| `ALERT_SITE_LABEL` | The school or site name shown in the alert. |
+| `THREAT_ALERT_WEBHOOK_URL` | Separate threat-assessment channel for violence, weapons, and explosives. https only. |
+| `THREAT_ALERT_WEBHOOK_FORMAT` | Optional; defaults to `ALERT_WEBHOOK_FORMAT`. |
+| `ALERT_SITE_LABEL` | The school or site name shown in alerts. |
 
-- The alert contains only: event type, category, which rail flagged it, site label, time, and a random reference ID. It never includes the question text, names, IP addresses, or any credential.
-- The person sees the crisis resources immediately. On Netlify the alert is sent after the reply, and a failed or slow alert (3 second limit) never changes what the person sees.
-- The reference ID is shown to the person and included in the alert, so staff can connect the two if the person later comes forward.
-- This site is anonymous, so an alert says that a concern occurred and where, not who. Identifying a user requires district sign-in, with FERPA, consent, and privacy-notice obligations, and alerts should route into the district's existing crisis protocol with a named responder.
+- Alerts carry only: event, channel, category, rail, site label, time, and a random reference ID. Never the question text, names, IP addresses, or any credential.
+- The person sees the support response immediately. On Netlify, alerts are sent after the reply; a failed or slow alert (3 second limit) never changes what the person sees.
+- Repeat alerts from the same browser session and channel within 30 minutes are combined, so staff are not flooded. This is best effort per server instance.
+- Threat alerts remind staff to route to the threat-assessment team for human review and not to take disciplinary action on the alert alone. Many students ask about weapons out of curiosity or for schoolwork.
+- **Monthly test alert:** `netlify/functions/alert-test.mjs` runs on the 1st of each month at 14:00 UTC and sends a clearly marked TEST message to each configured channel, proving it still works. It can also be run from the Netlify dashboard.
+- This site is anonymous, so an alert says that a concern occurred and where, not who. Identifying a user requires district sign-in, with FERPA, COPPA, consent, and privacy-notice obligations. Decisions about notifying parents belong to trained counselors, because in some homes notification could put a student at risk.
 
 ### About the PII rail
 
@@ -73,8 +91,10 @@ The hosted `nvidia/gliner-pii` endpoint reached end of life in July 2026, so rem
 |---|---|
 | `index.html` | Dev test page (marked DEVELOPMENT, not indexed by search engines), with the 4 cohort test scenarios |
 | `netlify/functions/ask.mjs` | The guardrails and answering function |
+| `netlify/functions/alert-test.mjs` | Scheduled monthly test of each configured alert channel |
+| `lib/support.mjs` | Support resources (English and Spanish), topic detection, and language detection |
 | `netlify/functions/ping.mjs` | Health check: shows whether the NVIDIA key is set (never its value) and which models each rail uses |
-| `tests/ask.test.mjs` | 27 automated tests with simulated NVIDIA responses (`npm test`), including the notebook's 4 scenarios, the safety endpoint fallback, and the crisis response and staff alert |
+| `tests/ask.test.mjs` | 44 automated tests with simulated NVIDIA responses (`npm test`), including the notebook's 4 scenarios, the safety endpoint fallback, supportive responses in English and Spanish, and both alert channels |
 | `scripts/eval.mjs` | Live batch evaluation against the real NVIDIA API (`npm run eval`), like the notebook's Batch Evaluation cell |
 | `netlify.toml` | Netlify settings for this dev site |
 | `.env.example` | Template for local testing; copy to `.env` (never commit `.env`) |

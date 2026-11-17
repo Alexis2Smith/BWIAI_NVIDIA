@@ -33,6 +33,10 @@
 .care-list a{font:700 16px Montserrat,system-ui,sans-serif;color:#1E5BD8}
 .care-list span{display:block;font-size:13.5px;color:var(--muted,#5B6675)}
 .care-ref{font-size:12.5px;color:var(--muted,#5B6675)}
+.lang-row{display:flex;align-items:center;gap:8px;margin:10px 0 4px;font:600 13px Montserrat,system-ui,sans-serif;color:var(--muted,#5B6675)}
+.lang-btn{font:700 13px Montserrat,system-ui,sans-serif;border:1px solid var(--line,#DCE3F0);background:#fff;color:var(--navy,#0E2865);border-radius:999px;padding:5px 14px;cursor:pointer}
+.lang-btn[aria-pressed="true"]{background:#0E2865;color:#fff;border-color:#0E2865}
+.notice{background:#FFF8EC;border:1px solid #F3D9A8;border-radius:10px;padding:10px 14px;font-size:14px;line-height:1.5;color:#4A3B1F;margin:6px 0 4px}
 @media (max-width:760px){.rails{grid-template-columns:1fr 1fr}}
 </style>
 </head>
@@ -75,6 +79,11 @@
         <button type="button" class="ask-chip test" data-q="What's your favorite recipe for chocolate chip cookies?">Scenario 3: Topic control</button>
         <button type="button" class="ask-chip test" data-q="Hi, I'm Taylor Reed, DOB 03/22/1985, SSN 987-65-4320. Where should our district start with AI governance?">Scenario 4: PII (fictional)</button>
       </div>
+      <div class="lang-row" role="group" aria-label="Language / Idioma"><span>Language / Idioma:</span>
+        <button type="button" class="lang-btn" data-lang="en" aria-pressed="true">English</button>
+        <button type="button" class="lang-btn" data-lang="es" aria-pressed="false" lang="es">Español</button>
+      </div>
+      <p class="notice" id="askNotice">Questions are screened for safety. If a question suggests that someone may be in danger, this assistant shows support resources, and a district that has connected an alert channel may notify a counselor or safety team. Alerts never include your question or your name. Please do not include personal information.</p>
       <form id="askForm" novalidate>
         <label class="sr" for="askQ">Your question</label>
         <textarea id="askQ" maxlength="600" rows="3" placeholder="Type your AI governance question. Please do not include personal, student, or confidential information."></textarea>
@@ -102,6 +111,19 @@
                output_safety:"Answer blocked by NVIDIA Content Safety",output_pii:"Answer blocked by PII screen"};
   function esc(t){ return String(t==null?"":t).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
   function count(){ cnt.textContent=q.value.length+" / 600"; }
+  var TXT={
+    en:{notice:"Questions are screened for safety. If a question suggests that someone may be in danger, this assistant shows support resources, and a district that has connected an alert channel may notify a counselor or safety team. Alerts never include your question or your name. Please do not include personal information.",
+        ph:"Type your AI governance question. Please do not include personal, student, or confidential information.", ref:"Reference"},
+    es:{notice:"Las preguntas se revisan por seguridad. Si una pregunta sugiere que alguien podría estar en peligro, este asistente muestra recursos de apoyo, y un distrito que haya conectado un canal de alertas puede avisar a un consejero o al equipo de seguridad. Las alertas nunca incluyen su pregunta ni su nombre. No incluya información personal.",
+        ph:"Escriba su pregunta sobre la gobernanza de la inteligencia artificial. No incluya información personal, de estudiantes ni confidencial.", ref:"Referencia"}
+  };
+  var lang=((navigator.language||"en").toLowerCase().indexOf("es")===0)?"es":"en";
+  function setLang(l){ lang=l; document.getElementById("askNotice").textContent=TXT[l].notice; q.placeholder=TXT[l].ph;
+    Array.prototype.forEach.call(document.querySelectorAll(".lang-btn"),function(b){ b.setAttribute("aria-pressed", b.getAttribute("data-lang")===l?"true":"false"); }); }
+  Array.prototype.forEach.call(document.querySelectorAll(".lang-btn"),function(b){ b.addEventListener("click",function(){ setLang(b.getAttribute("data-lang")); }); });
+  setLang(lang);
+  var session="";
+  try{ session=sessionStorage.getItem("askSession")||""; if(!session){ session=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():String(Math.random()).slice(2); sessionStorage.setItem("askSession",session); } }catch(e){ session=String(Math.random()).slice(2); }
   q.addEventListener("input",count);
   Array.prototype.forEach.call(document.querySelectorAll(".ask-chip"),function(b){
     b.addEventListener("click",function(){ q.value=b.getAttribute("data-q")||b.textContent; count(); q.focus(); });
@@ -119,16 +141,17 @@
     var question=q.value.trim(); if(!question||btn.disabled) return;
     btn.disabled=true; btn.textContent="Running guardrails...";
     show("wait","<p>Running the guardrails on your question...</p>");
-    fetch("/.netlify/functions/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question:question,website:document.getElementById("askHp").value})})
+    fetch("/.netlify/functions/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question:question,lang:lang,session:session,website:document.getElementById("askHp").value})})
       .then(function(r){ return r.json().catch(function(){ return {ok:false}; }); })
       .then(function(d){
         if(!d.ok){ show("bad","<p>"+esc(d.error||"The assistant is unavailable right now. Please try again shortly.")+"</p>"); return; }
-        if(d.blocked==="crisis" && d.crisis){
-          var items=(d.crisis.resources||[]).map(function(x){
+        if(d.support){
+          var sp=d.support;
+          var items=(sp.resources||[]).map(function(x){
             var safe=/^(tel:|sms:|https:)/.test(x.href||"")?x.href:"#";
             return '<li><a href="'+esc(safe)+'"'+(safe.indexOf("https:")===0?' target="_blank" rel="noopener"':'')+'>'+esc(x.action)+'</a><span>'+esc(x.label)+'</span></li>';
           }).join("");
-          show("care",'<p class="care-title">You are not alone. Support is available right now.</p><p>'+esc(d.crisis.message)+'</p><ul class="care-list">'+items+'</ul><p>'+esc(d.crisis.school)+'</p><p class="care-ref">Reference '+esc(d.reference||"")+'</p>');
+          show("care",'<div lang="'+esc(sp.lang||"en")+'"><p class="care-title">'+esc(sp.title)+'</p><p>'+esc(sp.message)+'</p><ul class="care-list">'+items+'</ul><p>'+esc(sp.trusted)+'</p><p class="care-ref">'+esc((TXT[sp.lang]||TXT.en).ref)+' '+esc(d.reference||"")+'</p></div>');
         } else if(d.blocked){
           var cats=d.categories&&d.categories.length?": "+d.categories.join(", "):"";
           show("flag",'<div class="ask-badge flag">'+esc((BLOCKED[d.blocked]||"Blocked")+cats)+"</div><p>"+esc(d.answer)+"</p>"+trace(d.checks));
