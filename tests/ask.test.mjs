@@ -168,7 +168,7 @@ console.log("Crisis response and staff alert");
 
   let s = crisisSim(), r = await run({}, s);
   assert.equal(r.body.blocked, "crisis"); assert.equal(r.body.answer, CRISIS.message);
-  assert.ok(r.body.crisis.resources.some((x) => x.action.includes("988")));
+  assert.ok(r.body.support.resources.some((x) => x.action.includes("988")));
   assert.ok(!r.body.answer.includes("rephrase"));
   assert.equal(s.calls.filter((x) => x.url.startsWith(HOOK)).length, 0);
   assert.equal(r.body.checks.at(-1).alert, "off"); ok("self-harm question gets crisis resources (988), not the rephrase message; alert off by default");
@@ -200,6 +200,89 @@ console.log("Crisis response and staff alert");
   const v = sim({ input: "User Safety: unsafe\nSafety Categories: Violence" });
   const rv = await ask("[violent request]", v);
   assert.equal(rv.body.blocked, "content_safety"); ok("other harmful categories keep the ordinary block message");
+}
+
+console.log("Supportive responses, Spanish, threat channel, repeat alerts, monthly test");
+{
+  const { cfg } = await import("../netlify/functions/ask.mjs");
+  const { runTest } = await import("../netlify/functions/alert-test.mjs");
+  const { detectLang, classify } = await import("../lib/support.mjs");
+  const COUNSEL = "https://alerts.example-district.org/counselor", THREAT = "https://alerts.example-district.org/threat";
+  // Simulator: inputVerdict / topicVerdict control the rails; records every call
+  const S = ({ input = "User Safety: safe", topic = "User Safety: safe" } = {}) => {
+    const calls = [];
+    const fetch = async (u, o) => {
+      calls.push({ url: u, body: o.body });
+      if (u.startsWith("https://alerts.")) return new Response("", { status: 200 });
+      const b = JSON.parse(o.body);
+      if (b.model === "nvidia/nemotron-3.5-lightning-30b-a3b") return reply("Guidance on AI governance.");
+      if (b.messages.length === 2) return reply("User Safety: safe\nResponse Safety: safe");
+      if (b.chat_template_kwargs?.custom_policy) return reply(topic);
+      return reply(input);
+    };
+    return { calls, fetch };
+  };
+  const go = async (q, s, env = {}, extra = {}) => {
+    const r = await handler(new Request("https://s/ask", { method: "POST", body: JSON.stringify({ question: q, ...extra }) }), { fetch: s.fetch, cfg: cfg({ NVIDIA_API_KEY: "nvapi-test", ...env }) });
+    return { status: r.status, body: await r.json() };
+  };
+  const hooks = (s, url) => s.calls.filter((x) => x.url === url);
+
+  // Threat channel
+  let s = S({ input: "User Safety: unsafe\nSafety Categories: Guns and Illegal Weapons" });
+  let r = await go("How do I make a bomb?", s);
+  assert.equal(r.body.blocked, "content_safety"); assert.equal(r.body.checks.at(-1).alert, "off"); ok("weapons question: firm block; threat alert off by default");
+  s = S({ input: "User Safety: unsafe\nSafety Categories: Violence" });
+  r = await go("How do I make a bomb?", s, { ALERT_WEBHOOK_URL: COUNSEL, THREAT_ALERT_WEBHOOK_URL: THREAT, ALERT_SITE_LABEL: "Lincoln Middle School" });
+  assert.equal(hooks(s, THREAT).length, 1); assert.equal(hooks(s, COUNSEL).length, 0);
+  const tb = JSON.parse(hooks(s, THREAT)[0].body);
+  assert.equal(tb.event, "threat_alert"); assert.equal(tb.channel, "threat"); assert.ok(!hooks(s, THREAT)[0].body.includes("bomb"));
+  assert.ok(!r.body.answer.includes("988")); ok("threat alert goes only to the threat-assessment channel, without the question text");
+  s = S({ input: "User Safety: unsafe\nSafety Categories: Violence" });
+  await go("How do I make a bomb?", s, { THREAT_ALERT_WEBHOOK_URL: THREAT, ALERT_WEBHOOK_FORMAT: "teams" });
+  assert.ok(JSON.parse(hooks(s, THREAT)[0].body).text.includes("Do not take disciplinary action on this alert alone")); ok("threat alert text reminds staff to review before any action");
+
+  // Supportive topics
+  s = S({ topic: "User Safety: unsafe" }); r = await go("My stepdad hits me and I am scared to go home", s);
+  assert.equal(r.body.blocked, "support"); assert.equal(r.body.topic, "abuse"); assert.ok(r.body.support.resources.some((x) => x.action.includes("422-4453")));
+  assert.equal(r.body.checks.at(-1).alert, "not_applicable"); ok("abuse disclosure gets Childhelp resources instead of the off-topic message");
+  s = S({ input: "User Safety: unsafe\nSafety Categories: Controlled/Regulated Substances" }); r = await go("Where can I buy vapes?", s);
+  assert.equal(r.body.topic, "substance"); assert.ok(r.body.support.resources.some((x) => x.action.includes("4357"))); ok("substance category gets SAMHSA resources");
+  s = S({ topic: "User Safety: unsafe" }); r = await go("I have not been eating for days to lose weight", s);
+  assert.equal(r.body.topic, "eating"); assert.ok(r.body.support.resources.some((x) => x.label.includes("not a crisis line"))); ok("eating disorder concern gets the Alliance line, honestly labeled as not a crisis line");
+  s = S({ topic: "User Safety: unsafe" }); r = await go("Someone has nude pictures of me and wants money", s);
+  assert.equal(r.body.topic, "sextortion"); assert.ok(r.body.support.resources.some((x) => x.href.includes("takeitdown"))); ok("sextortion gets Take It Down and CyberTipline");
+  s = S({ input: "User Safety: unsafe\nSafety Categories: Harassment" }); r = await go("Kids keep harassing me online", s);
+  assert.equal(r.body.topic, "bullying"); ok("harassment category gets bullying support");
+  s = S(); r = await go("How should a district write a bullying and student wellness policy for AI tools?", s);
+  assert.equal(r.body.blocked, undefined); assert.equal(r.body.answer, "Guidance on AI governance."); ok("policy questions that mention these topics are answered normally");
+  assert.equal(classify({ categories: ["Controlled/Regulated Substances", "Suicide and Self Harm"] }), "crisis"); ok("crisis takes priority when several categories are flagged");
+
+  // Spanish
+  assert.equal(detectLang("¿Cómo puedo ayudar a mi hijo en la escuela?"), "es"); assert.equal(detectLang("How can I help my child at school?"), "en"); ok("Spanish detection from the question text");
+  s = S({ input: "User Safety: unsafe\nSafety Categories: Suicide and Self Harm" }); r = await go("No quiero vivir, ¿qué hago?", s);
+  assert.equal(r.body.lang, "es"); assert.ok(r.body.support.resources.some((x) => x.action.includes("presione 2"))); assert.ok(r.body.support.resources.some((x) => x.action.includes("AYUDA"))); ok("Spanish crisis response: 988 press 2 and text AYUDA");
+  s = S({ input: "User Safety: unsafe\nSafety Categories: Suicide and Self Harm" }); r = await go("I feel hopeless", s, {}, { lang: "es" });
+  assert.equal(r.body.lang, "es"); ok("page language choice sets the response language");
+  s = S({ topic: "User Safety: unsafe" }); r = await go("¿Cuál es la mejor receta de galletas para mi hija?", s);
+  assert.equal(r.body.blocked, "topic_control"); assert.ok(r.body.answer.startsWith("Esta pregunta")); ok("ordinary block messages appear in Spanish too");
+  s = S({ input: "User Safety: unsafe\nSafety Categories: Suicide and Self Harm" }); r = await go("I want to die", s);
+  assert.ok(r.body.support.resources.some((x) => x.label.includes("240 languages"))); ok("English response tells non-Spanish speakers 988 interprets in 240+ languages");
+
+  // Repeat alerts
+  const sess = "test-session-" + Math.random().toString(36).slice(2);
+  s = S({ input: "User Safety: unsafe\nSafety Categories: Suicide and Self Harm" });
+  const r1 = await go("I want to die", s, { ALERT_WEBHOOK_URL: COUNSEL }, { session: sess });
+  const r2 = await go("I really want to die", s, { ALERT_WEBHOOK_URL: COUNSEL }, { session: sess });
+  assert.equal(r1.body.checks.at(-1).alert, "sent"); assert.equal(r2.body.checks.at(-1).alert, "combined"); assert.equal(hooks(s, COUNSEL).length, 1);
+  assert.ok(r2.body.support.resources.length > 0); ok("repeat alerts from one session are combined; the person still sees resources every time");
+
+  // Monthly test alert
+  const calls = []; const f = async (u, o) => { calls.push({ u, body: JSON.parse(o.body) }); return new Response("", { status: 200 }); };
+  let res = await runTest(cfg({ NVIDIA_API_KEY: "k" }), f);
+  assert.deepEqual(res, { counselor: "off", threat: "off" }); assert.equal(calls.length, 0);
+  res = await runTest(cfg({ NVIDIA_API_KEY: "k", ALERT_WEBHOOK_URL: COUNSEL, THREAT_ALERT_WEBHOOK_URL: THREAT, ALERT_WEBHOOK_FORMAT: "slack" }), f);
+  assert.deepEqual(res, { counselor: "sent", threat: "sent" }); assert.ok(calls.every((x) => x.body.text.startsWith("TEST: "))); ok("monthly test alert reaches each configured channel and skips the rest");
 }
 
 console.log(`\nALL ${n} TESTS PASSED`);
