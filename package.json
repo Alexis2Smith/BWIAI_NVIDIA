@@ -1,0 +1,10 @@
+{
+  "name": "bwiai-nvidia-ask-the-institute",
+  "private": true,
+  "type": "module",
+  "description": "Dev build: Ask the Institute with NVIDIA Nemotron guardrails (content safety, topic control, PII) for the BWIAI NVIDIA Test Kitchen",
+  "scripts": {
+    "test": "node tests/ask.test.mjs",
+    "eval": "node scripts/eval.mjs"
+  }
+}
