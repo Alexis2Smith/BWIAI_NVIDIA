@@ -186,8 +186,26 @@ const PII_PATTERNS = [
   { type: "phone_number", re: /(?:\+?1[\s.-]?)?\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/ },
   { type: "date_of_birth", re: /\b(?:dob|d\.o\.b\.?|date of birth|born(?: on)?)\b[\s:,-]*\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}/i },
   { type: "card_number", re: /\b(?:\d[ -]?){13,16}\b/, check: (m) => luhn(m[0]) },
-  { type: "street_address", re: /\b\d{1,6}\s+(?:[A-Z][a-z]+\s){1,3}(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Court|Ct|Boulevard|Blvd|Circle|Cir|Way)\b\.?/ }
+  { type: "street_address", re: /\b\d{1,6}\s+(?:[A-Z][a-z]+\s){1,3}(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Court|Ct|Boulevard|Blvd|Circle|Cir|Way)\b\.?/ },
+  // K-12 credentials. The model misses unstructured secrets such as passwords (NVIDIA customer service cookbook),
+  // so these are anchored on the words people use when sharing them.
+  // A shared password needs an explicit separator ("my password is X", "pwd: X"), so policy questions such as
+  // "password resets" or "password sharing" are not flagged.
+  { type: "password", re: /\b(?:password|passwd|pwd|passcode|pass code|contrase[nñ]a|clave)\b\s*(?:is|was|=|:|es)\s*["'“]?[^\s"'”]{4,}/i, check: (m) => !/(?:is|was|=|:|es)\s*["'“]?(?:resets?|polic(?:y|ies)|managers?|requirements?|rules?|strong|weak|safe|secure|important|required|changed|expired|reused|shared|private|protected|the|a|an|my|your|our|their|not|too|still|seguras?|importante)\b/i.test(m[0]) },
+  { type: "student_id", re: /\b(?:student|pupil|school|estudiante|alumno)\s*(?:id|identification|number|no\.?|#|n[uú]mero)\b[\s:#.-]*(?:is|es)?[\s:#.-]*[A-Z]{0,3}\d{4,10}\b/i },
+  { type: "lunch_pin", re: /\b(?:(?:lunch|cafeteria|meal|lunch account|comedor|almuerzo)\s*(?:pin|code|number|n[uú]mero|c[oó]digo)|(?:pin|c[oó]digo|n[uú]mero)\s+(?:del?|para el)\s+(?:almuerzo|comedor))\b[\s:#.-]*(?:is|es)?[\s:#.-]*\d{3,8}\b/i }
 ];
+
+// FERPA: requests for another person's education records (grades, passwords, schedule, attendance, address).
+// Ask the Institute has no access to student records; these are redirected to the school's verified channels.
+export function isRecordsRequest(text) {
+  const t = String(text || "");
+  const ask = /(?<!\p{L})(give|tell|send|show|reset|change|look up|lookup|pull up|access|share|find|get|dar|decir|mostrar|enviar|cambiar|restablecer|ver)(?!\p{L})[^.?!]{0,60}(?<!\p{L})(grades?|password|login|log-in|records?|report cards?|transcripts?|schedule|attendance|home address|address|phone number|discipline|test scores?|iep|calificaciones|notas|contrase[nñ]a|horario|asistencia|expediente)(?!\p{L})/iu;
+  // Whose records: a named person ("Jordan's") or a family relationship. Pronouns alone are too broad
+  // ("give students feedback on their grades" is a teaching question, not a records request).
+  const whose = /\b(my (son|daughter|child|kid|grandchild|grandson|granddaughter|stepson|stepdaughter|nephew|niece)'?s?|another student'?s?|a student'?s)\b|\b[A-Z][a-z]+'s\b|(?<!\p{L})mi (hijo|hija|ni[nñ]o|ni[nñ]a|nieto|nieta)(?!\p{L})/u;
+  return ask.test(t) && whose.test(t);
+}
 
 function luhn(s) {
   const d = s.replace(/\D/g, "");
@@ -291,7 +309,8 @@ export async function topicControl(c, question, fetchImpl) {
 }
 
 export const MESSAGES = {
-  pii: "This question was not sent because it appears to contain personal information (such as a Social Security number, email address, phone number, or date of birth). Please remove personal details and ask again.",
+  pii: "This question was not sent because it appears to contain personal information (such as a Social Security number, email address, phone number, date of birth, password, student ID, or lunch PIN). Please remove personal details and ask again. If you shared a password or PIN, consider changing it.",
+  records_request: "Ask the Institute cannot access student records, grades, passwords, or schedules. Under FERPA, schools release a student's education records only to verified parents, guardians, or eligible students. Please contact your school office or use your district's parent portal, where your identity can be verified.",
   content_safety: "This question was not sent to the assistant because NVIDIA Content Safety flagged it. Please rephrase it as a question about AI governance, responsible AI adoption, or the Institute.",
   topic_control: "This question is outside what Ask the Institute covers. Please ask about AI governance, responsible AI adoption, or the Institute's courses, credentials, and services.",
   output_safety: "The assistant drafted an answer, but NVIDIA Content Safety flagged it, so it was not shown. Please try rephrasing your question, or book a discovery call for a direct answer from Dr. Smith.",
@@ -356,6 +375,11 @@ export async function handler(req, deps = {}) {
     const pii = detectPII(question);
     checks.push({ rail: "pii_input", decision: pii.length ? "block" : "allow", entities: pii });
     if (pii.length) return blocked("pii", pii);
+
+    // Rail 1b: FERPA records request (another person's grades, password, schedule): redirected, never sent to a model
+    const records = isRecordsRequest(question);
+    checks.push({ rail: "records_request", decision: records ? "block" : "allow" });
+    if (records) return blocked("records_request");
 
     // Rail 2: content safety on input
     const { verdict: s1, endpoint: e1 } = await contentSafety(c, question, null, fetchImpl);
