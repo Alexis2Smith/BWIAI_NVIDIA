@@ -146,6 +146,14 @@ h1,h2,h3{font-family:"Playfair Display",Georgia,serif;color:var(--navy);line-hei
 .care-list a{font:700 16px Montserrat,sans-serif;color:var(--royal)}
 .care-list span{display:block;font-size:13.5px;color:var(--muted)}
 .care-ref{font-size:12.5px;color:var(--muted)}
+.fb{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:14px 0 4px;padding-top:12px;border-top:1px solid var(--line);font:700 14px Montserrat,sans-serif;color:var(--navy)}
+.fb button{font:700 14px Montserrat,sans-serif;border-radius:999px;padding:8px 18px;border:1.5px solid var(--line);background:#fff;color:var(--navy);cursor:pointer}
+.fb button:hover{border-color:var(--navy)}
+.fb button[aria-pressed="true"]{background:var(--navy);color:#fff;border-color:var(--navy)}
+.fb-more{width:100%;display:grid;gap:8px}
+.fb-more textarea{width:100%;min-height:70px;font:14px/1.5 Montserrat,sans-serif;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px}
+.fb-more small{font-weight:500;color:var(--muted)}
+.fb-thanks{font-weight:600;color:#13693F}
 .redact-btn{background:#fff;color:var(--navy);border:2px solid var(--navy);border-radius:999px;padding:10px 20px;font:700 15px Montserrat,sans-serif;cursor:pointer}
 .redact-btn:hover,.redact-btn:focus{background:var(--navy);color:#fff}
 .redact-note{font-size:13.5px;font-weight:600;color:#13693F;background:#E6F4EC;border-radius:10px;padding:10px 12px}
@@ -496,9 +504,9 @@ body.is-cohort .cohort{display:block}
         execLine:"The Executive Institute also offers organization licenses, workshops, Fractional Chief Artificial Intelligence Officer retainers, and executive coaching.",
         motto:"We need a seat at the table to effectuate change.",
         sig1:"Founder &amp; Chief Executive Officer, Ascend AI NOW&trade;", sig2:"Fractional Chief Artificial Intelligence Officer",
-        fine:"General education, not legal or compliance advice for your organization. Questions are processed by NVIDIA hosted models and are not stored by Ascend AI NOW.",
+        fine:"General education, not legal or compliance advice for your organization. Questions are processed by NVIDIA hosted models and are not stored by Ascend AI NOW. Anonymous usage counts, such as which guardrail responded and how long it took, are recorded to improve this tool; question text is never stored.",
         contact:"Questions about assessments:", built:"Built with NVIDIA Nemotron for the BWIAI&trade; NVIDIA Test Kitchen.",
-        demo:"See the guardrails in action", speak:"Speak your question", stopSpeak:"Stop listening", listen:"Listen to this answer", stopListen:"Stop reading",
+        demo:"See the guardrails in action", fbQ:"Was this helpful?", yes:"Yes", no:"No", fbAsk:"Tell me more (optional). Please do not include names or personal information.", fbSend:"Send feedback", fbThanks:"Thank you. Your feedback helps improve Ask the Institute.", speak:"Speak your question", stopSpeak:"Stop listening", listen:"Listen to this answer", stopListen:"Stop reading",
         voiceNote:"Voice typing uses your browser's built-in speech service, which may send the audio to the browser maker (for example, Google in Chrome) to turn it into text. Please do not say personal information. Your words appear in the box so you can review them before you press Ask the Institute.",
         micError:"The microphone could not start. Please allow microphone access for this page, or type your question.", cohortLink:"Cohort test mode", cohortTitle:"Cohort test mode",
         devnote:'Test scenarios for the BWIAI&trade; NVIDIA Test Kitchen cohort, reproducing the Week 3 notebook. Health check: <a href="/.netlify/functions/ping">/.netlify/functions/ping</a>.',
@@ -550,9 +558,9 @@ body.is-cohort .cohort{display:block}
         execLine:"El Instituto Ejecutivo también ofrece licencias para organizaciones, talleres, servicios de Directora de Inteligencia Artificial fraccional y coaching ejecutivo.",
         motto:"Necesitamos un lugar en la mesa para lograr el cambio.",
         sig1:"Fundadora y Directora Ejecutiva, Ascend AI NOW&trade;", sig2:"Directora de Inteligencia Artificial fraccional (Fractional Chief Artificial Intelligence Officer)",
-        fine:"Información educativa general, no asesoría legal ni de cumplimiento para su organización. Las preguntas se procesan con modelos alojados por NVIDIA y Ascend AI NOW no las almacena.",
+        fine:"Información educativa general, no asesoría legal ni de cumplimiento para su organización. Las preguntas se procesan con modelos alojados por NVIDIA y Ascend AI NOW no las almacena. Se registran conteos anónimos de uso, como qué salvaguarda respondió y cuánto tardó, para mejorar esta herramienta; el texto de las preguntas nunca se guarda.",
         contact:"Preguntas sobre evaluaciones:", built:"Creado con NVIDIA Nemotron para el BWIAI&trade; NVIDIA Test Kitchen.",
-        demo:"Vea las salvaguardas en acción", speak:"Diga su pregunta", stopSpeak:"Dejar de escuchar", listen:"Escuchar esta respuesta", stopListen:"Detener la lectura",
+        demo:"Vea las salvaguardas en acción", fbQ:"¿Le fue útil?", yes:"Sí", no:"No", fbAsk:"Cuéntenos más (opcional). No incluya nombres ni información personal.", fbSend:"Enviar comentario", fbThanks:"Gracias. Sus comentarios ayudan a mejorar Ask the Institute.", speak:"Diga su pregunta", stopSpeak:"Dejar de escuchar", listen:"Escuchar esta respuesta", stopListen:"Detener la lectura",
         voiceNote:"El dictado por voz usa el servicio de voz integrado de su navegador, que puede enviar el audio a la empresa del navegador (por ejemplo, Google en Chrome) para convertirlo en texto. No diga información personal. Sus palabras aparecen en el cuadro para que las revise antes de presionar Preguntar al Instituto.",
         micError:"No se pudo iniciar el micrófono. Permita el acceso al micrófono para esta página o escriba su pregunta.", cohortLink:"Modo de prueba del grupo", cohortTitle:"Modo de prueba del grupo",
         devnote:'Escenarios de prueba para el grupo del BWIAI&trade; NVIDIA Test Kitchen, que reproducen el cuaderno de la Semana 3. Verificación del sistema: <a href="/.netlify/functions/ping">/.netlify/functions/ping</a>.',
@@ -615,6 +623,7 @@ body.is-cohort .cohort{display:block}
   function secs(ms){ return (ms/1000).toLocaleString(lang==="es"?"es":"en",{minimumFractionDigits:1,maximumFractionDigits:1})+" s"; }
   function steps(){ return '<ul class="steps">'+UI[lang].rails.map(function(r){ return "<li>"+esc(r[0])+"</li>"; }).join("")+"</ul>"; }
   // ---------- Voice: speak the question (speech to text) and listen to the answer (text to speech) ----------
+  var voiceUsed=false;
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition, mic=document.getElementById("micBtn"), micLabel=document.getElementById("micLabel"),
       vNote=document.getElementById("voiceNote"), rec=null, listening=false, baseText="";
   function voiceLang(){ return lang==="es"?"es-US":"en-US"; }
@@ -623,11 +632,11 @@ body.is-cohort .cohort{display:block}
     var lb=document.getElementById("listenBtn"); if(lb) lb.lastChild.textContent=speaking?UI[lang].stopListen:UI[lang].listen; };
   if(SR){
     mic.hidden=false; vNote.hidden=false; vNote.textContent=UI[lang].voiceNote; micLabel.textContent=UI[lang].speak;
-    mic.addEventListener("click",function(){
+    mic.addEventListener("click",function(){ if(!listening) track("voice-speak",{lang:lang});
       if(listening){ rec&&rec.stop(); return; }
       rec=new SR(); rec.lang=voiceLang(); rec.interimResults=true; rec.continuous=false; rec.maxAlternatives=1;
       baseText=q.value.trim()?q.value.trim()+" ":"";
-      rec.onresult=function(ev){ var t=""; for(var i=0;i<ev.results.length;i++){ t+=ev.results[i][0].transcript; } q.value=(baseText+t).slice(0,600); count(); };
+      rec.onresult=function(ev){ voiceUsed=true; var t=""; for(var i=0;i<ev.results.length;i++){ t+=ev.results[i][0].transcript; } q.value=(baseText+t).slice(0,600); count(); };
       rec.onerror=function(ev){ setMic(false); if(ev.error==="not-allowed"||ev.error==="service-not-allowed"||ev.error==="audio-capture"){ vNote.textContent=UI[lang].micError; } };
       rec.onend=function(){ setMic(false); q.focus(); };
       try{ rec.start(); setMic(true); }catch(e){ setMic(false); vNote.textContent=UI[lang].micError; }
@@ -638,7 +647,7 @@ body.is-cohort .cohort{display:block}
   // Skips the timing line, the audit trail, and buttons.
   function plain(el){ var good=out.classList.contains("good"), parts=[];
     Array.prototype.forEach.call(el.querySelectorAll("p, .care-list li"),function(n){
-      if(n.closest(".audit")||n.classList.contains("care-ref")||(good&&n.classList.contains("rep-meta"))) return;
+      if(n.closest(".audit")||n.closest(".fb")||n.classList.contains("care-ref")||(good&&n.classList.contains("rep-meta"))) return;
       var t=n.matches(".care-list li")?Array.prototype.map.call(n.children,function(c){ return c.textContent.trim(); }).join(", "):n.textContent;
       t=t.replace(/\s+/g," ").trim(); if(t){ parts.push(/[.!?:]$/.test(t)?t:t+"."); } });
     return parts.join(" "); }
@@ -662,7 +671,7 @@ body.is-cohort .cohort{display:block}
   function stopSpeech(){ if(synth){ synth.cancel(); } speaking=false; var lb=document.getElementById("listenBtn"); if(lb){ lb.setAttribute("aria-pressed","false"); lb.lastChild.textContent=UI[lang].listen; } }
   function listenBtn(){ return synth?'<button type="button" class="listen" id="listenBtn" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg><span>'+esc(UI[lang].listen)+'</span></button>':""; }
   function wireListen(){ var lb=document.getElementById("listenBtn"); if(!lb) return;
-    lb.addEventListener("click",function(){
+    lb.addEventListener("click",function(){ if(!speaking) track("listen",{lang:lang});
       if(speaking){ stopSpeech(); return; }
       var body=out.querySelector(".rep-body"); var text=plain(body); if(!text) return;
       synth.cancel(); var v=pickVoice(), parts=chunks(text);
@@ -671,11 +680,27 @@ body.is-cohort .cohort{display:block}
         u.onerror=function(){ stopSpeech(); }; if(i===parts.length-1) u.onend=function(){ stopSpeech(); }; synth.speak(u); });
     }); }
   if(synth&&synth.onvoiceschanged!==undefined){ synth.onvoiceschanged=function(){}; }
+  // ---------- Page visits (Umami). Paste the Umami website ID here to turn it on; empty means off. ----------
+  var UMAMI_ID="";
+  if(UMAMI_ID){ var us=document.createElement("script"); us.defer=true; us.src="https://cloud.umami.is/script.js"; us.setAttribute("data-website-id",UMAMI_ID); document.head.appendChild(us); }
+  function track(name,data){ try{ if(window.umami&&umami.track) umami.track(name,data); }catch(e){} }
+  // ---------- "Was this helpful?" feedback ----------
+  var lastOutcome="cleared";
+  function fbHtml(){ var U=UI[lang]; return '<div class="fb" id="fbBox"><span>'+esc(U.fbQ)+'</span><button type="button" data-v="1" aria-pressed="false">'+esc(U.yes)+'</button><button type="button" data-v="0" aria-pressed="false">'+esc(U.no)+'</button></div>'; }
+  function sendFb(payload){ return fetch("/.netlify/functions/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}).catch(function(){}); }
+  function wireFeedback(){ var box=document.getElementById("fbBox"); if(!box) return; var outcome=lastOutcome, fbLang=lang;
+    Array.prototype.forEach.call(box.querySelectorAll("button[data-v]"),function(b){ b.addEventListener("click",function(){
+      var helpful=b.getAttribute("data-v")==="1"; var U=UI[fbLang];
+      sendFb({helpful:helpful,outcome:outcome,lang:fbLang}); track("feedback",{helpful:helpful,outcome:outcome});
+      box.innerHTML='<p class="fb-thanks">'+esc(U.fbThanks)+'</p><div class="fb-more"><label for="fbText"><small>'+esc(U.fbAsk)+'</small></label><textarea id="fbText" maxlength="500"></textarea><button type="button" id="fbSend">'+esc(U.fbSend)+'</button></div>';
+      document.getElementById("fbSend").addEventListener("click",function(){ var t=document.getElementById("fbText").value.trim(); if(!t) return;
+        sendFb({helpful:helpful,outcome:outcome,lang:fbLang,comment:t}); box.innerHTML='<p class="fb-thanks">'+esc(U.fbThanks)+'</p>'; });
+    }); }); }
   var PILL={good:["st-ok","stOk"],flag:["st-block","stBlock"],redirect:["st-redirect","stRedirect"],care:["st-care","stCare"],wait:["st-care","stWait"],bad:["st-block","stBad"]};
   function show(cls,html,pill){ var p=PILL[pill||cls]; out.className="ask-out "+cls; stopSpeech();
     var lb=(cls==="good"||cls==="flag"||cls==="care")?listenBtn():"";
-    out.innerHTML='<div class="rep-head"><span class="rep-title">'+esc(UI[lang].report)+'</span><span class="pill '+p[0]+'">'+esc(UI[lang][p[1]])+'</span></div><div class="rep-body">'+lb+html+'</div>';
-    out.hidden=false; wireListen(); }
+    out.innerHTML='<div class="rep-head"><span class="rep-title">'+esc(UI[lang].report)+'</span><span class="pill '+p[0]+'">'+esc(UI[lang][p[1]])+'</span></div><div class="rep-body">'+lb+html+((cls==="good"||cls==="flag")?fbHtml():"")+'</div>';
+    out.hidden=false; wireListen(); wireFeedback(); }
   var cleanedNext=false;
   f.addEventListener("submit",function(e){
     e.preventDefault();
@@ -684,9 +709,10 @@ body.is-cohort .cohort{display:block}
     var question=q.value.trim(); if(!question||btn.disabled) return;
     btn.disabled=true; btn.textContent=UI[lang].running;
     show("wait",esc(UI[lang].runningMsg)+steps());
-    fetch("/.netlify/functions/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question:question,lang:lang,session:session,website:document.getElementById("askHp").value})})
+    fetch("/.netlify/functions/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question:question,lang:lang,session:session,voice:voiceUsed,cleaned:cleaned,website:document.getElementById("askHp").value})})
       .then(function(r){ return r.json().catch(function(){ return {ok:false}; }); })
       .then(function(d){
+        voiceUsed=false; lastOutcome=(!d||!d.ok)?"error":(d.blocked||"cleared"); track("ask",{outcome:lastOutcome,lang:lang});
         if(!d.ok){ show("bad","<p>"+esc(lang==="es"?UI.es.unavailable:(d.error||UI.en.unavailable))+"</p>"); return; }
         if(d.support){
           var sp=d.support;
