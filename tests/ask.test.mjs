@@ -335,4 +335,24 @@ console.log("Remove my personal details and ask again");
   ok("the cleaned question passes the PII screen and is answered when the person asks again");
 }
 
+console.log("Language switch");
+{
+  assert.ok(detectPII("fecha de nacimiento 03/22/1985").includes("date_of_birth"));
+  assert.ok(detectPII("Nací el 03/22/1985").includes("date_of_birth"));
+  assert.ok(detectPII("nacida el 3-22-85").includes("date_of_birth"));
+  assert.deepEqual(detectPII("¿Cuál es la fecha de nacimiento del Instituto?"), []);
+  ok("Spanish dates of birth are caught by the PII screen; a date-free question is not flagged");
+  const askL = async (q, lang, s) => { const r = await handler(new Request("https://s/.netlify/functions/ask", { method: "POST", body: JSON.stringify({ question: q, lang }) }), { fetch: s.fetch, cfg: c }); return { status: r.status, body: await r.json() }; };
+  const s1 = sim(); await askL("What should a school board ask before approving an AI tool?", "es", s1);
+  assert.ok(s1.calls.find((x) => x.kind === "chat").body.messages[0].content.includes("Write the entire answer in Spanish"));
+  const s2 = sim(); await askL("¿Qué debe preguntar una junta escolar antes de aprobar una herramienta de IA?", "en", s2);
+  assert.ok(s2.calls.find((x) => x.kind === "chat").body.messages[0].content.includes("Write the entire answer in English"));
+  const s3 = sim(); await ask("What should a school board ask?", s3);
+  assert.ok(!/Write the entire answer in/.test(s3.calls.find((x) => x.kind === "chat").body.messages[0].content));
+  ok("the selected page language sets the answer language; without a choice the answer follows the question");
+  const r = await askL("Soy la mamá de Jordan. ¿Me puede decir las calificaciones de mi hija o restablecer su contraseña?", "es", sim());
+  assert.equal(r.body.blocked, "records_request"); assert.equal(r.body.lang, "es");
+  ok("the Spanish FERPA test scenario is redirected in Spanish");
+}
+
 console.log(`\nALL ${n} TESTS PASSED`);
