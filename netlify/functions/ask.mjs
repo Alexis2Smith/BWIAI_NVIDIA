@@ -184,7 +184,7 @@ const PII_PATTERNS = [
   { type: "ssn", re: /\b\d{3}[- ]\d{2}[- ]\d{4}\b/ },
   { type: "email", re: /\b[A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,})\b/i, allow: (m) => ALLOWED_EMAIL_DOMAINS.includes(m[1].toLowerCase()) },
   { type: "phone_number", re: /(?:\+?1[\s.-]?)?\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/ },
-  { type: "date_of_birth", re: /\b(?:dob|d\.o\.b\.?|date of birth|born(?: on)?)\b[\s:,-]*\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}/i },
+  { type: "date_of_birth", re: /(?<!\p{L})(?:dob|d\.o\.b\.?|date of birth|born(?: on)?|fecha de nacimiento|f\. de nac\.?|nacid[oa](?: el)?|nac[ií](?: el)?)(?!\p{L})[\s:,-]*\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}/iu },
   { type: "card_number", re: /\b(?:\d[ -]?){13,16}\b/, check: (m) => luhn(m[0]) },
   { type: "street_address", re: /\b\d{1,6}\s+(?:[A-Z][a-z]+\s){1,3}(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Court|Ct|Boulevard|Blvd|Circle|Cir|Way)\b\.?/ },
   // K-12 credentials. The model misses unstructured secrets such as passwords (NVIDIA customer service cookbook),
@@ -324,6 +324,10 @@ export async function topicControl(c, question, fetchImpl) {
   }, fetchImpl);
 }
 
+// Language chosen with the page's English/Español switch. Without a choice, the answer follows the question's language.
+export const LANG_ES = "\n- The person selected Spanish (Español) on the page. Write the entire answer in Spanish, even if the question is in English. Keep program and track names as published.";
+export const LANG_EN = "\n- The person selected English on the page. Write the entire answer in English, even if the question is in another language.";
+
 export const MESSAGES = {
   pii: "This question was not sent because it appears to contain personal information (such as a Social Security number, email address, phone number, date of birth, password, student ID, or lunch PIN). Please remove personal details and ask again. If you shared a password or PIN, consider changing it.",
   records_request: "Ask the Institute cannot access student records, grades, passwords, or schedules. Under FERPA, schools release a student's education records only to verified parents, guardians, or eligible students. Please contact your school office or use your district's parent portal, where your identity can be verified.",
@@ -417,7 +421,7 @@ export async function handler(req, deps = {}) {
     // Generation
     const answer = String(await nvidia(c, {
       model: c.chatModel,
-      messages: [{ role: "system", content: SYSTEM }, { role: "user", content: question }],
+      messages: [{ role: "system", content: SYSTEM + (body.lang === "es" ? LANG_ES : body.lang === "en" ? LANG_EN : "") }, { role: "user", content: question }],
       max_tokens: 400, temperature: 0.3,
       chat_template_kwargs: { enable_thinking: false }
     }, fetchImpl)).trim();
