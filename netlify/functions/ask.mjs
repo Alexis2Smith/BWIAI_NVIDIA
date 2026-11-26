@@ -421,7 +421,7 @@ export async function handler(req, deps = {}) {
     // Generation
     const answer = String(await nvidia(c, {
       model: c.chatModel,
-      messages: [{ role: "system", content: SYSTEM + (body.lang === "es" ? LANG_ES : body.lang === "en" ? LANG_EN : "") }, { role: "user", content: question }],
+      messages: [{ role: "system", content: SYSTEM + (body.lang === "es" ? LANG_ES : body.lang === "en" ? LANG_EN : "") }, { role: "user", content: question + (body.lang === "es" ? "\n\n(Responda en español.)" : body.lang === "en" ? "\n\n(Answer in English.)" : "") }],
       max_tokens: 400, temperature: 0.3,
       chat_template_kwargs: { enable_thinking: false }
     }, fetchImpl)).trim();
