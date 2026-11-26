@@ -54,7 +54,7 @@ assert.equal(r.body.checks.length, 6); ok("Scenario 1: safe, on-topic question p
 s = sim({ input: "User Safety: unsafe\nSafety Categories: Guns and Illegal Weapons" });
 r = await ask("[harmful request]", s);
 assert.equal(r.body.blocked, "content_safety"); assert.deepEqual(r.body.categories, ["Guns and Illegal Weapons"]);
-assert.equal(kinds(s), "input"); ok("Scenario 2: content safety blocks before the main model");
+assert.equal(kinds(s), "input,topic"); assert.ok(!kinds(s).includes("chat")); ok("Scenario 2: content safety blocks before the main model (topic control runs alongside it)");
 
 // Scenario 3: off-topic: content safety passes, topic control blocks, 2 calls
 s = sim({ topic: "User Safety: unsafe" });
@@ -355,6 +355,30 @@ console.log("Language switch");
   const r = await askL("Soy la mamá de Jordan. ¿Me puede decir las calificaciones de mi hija o restablecer su contraseña?", "es", sim());
   assert.equal(r.body.blocked, "records_request"); assert.equal(r.body.lang, "es");
   ok("the Spanish FERPA test scenario is redirected in Spanish");
+}
+
+console.log("Speed and timing");
+{
+  // Both question checks start before either finishes; the answer model waits for both.
+  let inFlight = 0, maxInFlight = 0; const order = [];
+  const slow = { calls: [], fetch: async (u, o) => { const b = JSON.parse(o.body);
+    const kind = b.chat_template_kwargs?.custom_policy ? "topic" : b.model === c.safetyModel ? (b.messages.length === 2 ? "output" : "input") : "chat";
+    order.push("start:" + kind); inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((r) => setTimeout(r, 30)); inFlight--; order.push("end:" + kind);
+    return reply({ input: "User Safety: safe", topic: "User Safety: safe", chat: "Guidance.", output: "User Safety: safe\nResponse Safety: safe" }[kind]); } };
+  const r = await ask("What should a school board ask?", slow);
+  assert.equal(r.body.answer, "Guidance."); assert.equal(maxInFlight, 2);
+  assert.ok(order.indexOf("start:chat") > order.indexOf("end:input") && order.indexOf("start:chat") > order.indexOf("end:topic"));
+  ok("content safety and topic control run together, and the answer model starts only after both pass");
+  assert.ok(r.body.checks.filter((x) => /content_safety|topic/.test(x.rail)).every((x) => typeof x.ms === "number"));
+  assert.ok(typeof r.body.ms === "number" && typeof r.body.answer_ms === "number");
+  ok("each model-based guardrail reports its time in milliseconds, plus total and answer time");
+  const s2 = sim({ input: "User Safety: unsafe\nSafety Categories: Violence", topic: "garbled" });
+  const r2 = await ask("harmful", s2); assert.equal(r2.body.blocked, "content_safety");
+  ok("a content safety block still applies when the topic check returns an unreadable verdict");
+  const s3 = sim({ topic: "garbled" }); const r3 = await ask("What should a school board ask?", s3);
+  assert.equal(r3.status, 502); assert.ok(!kinds(s3).includes("chat"));
+  ok("fails closed: no answer when the topic verdict is unreadable, and the answer model is never called");
 }
 
 console.log(`\nALL ${n} TESTS PASSED`);
