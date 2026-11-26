@@ -355,11 +355,14 @@ export async function handler(req, deps = {}) {
   if (question.length > MAX_Q) return json(400, { ok: false, error: `Please keep your question under ${MAX_Q} characters.` });
 
   const checks = []; // trace of each rail, like the NeMo Guardrails colang history
+  const started = Date.now();
+  // Runs one step and reports how long it took, in milliseconds (shown in the audit trail).
+  const timed = async (fn) => { const t = Date.now(); const r = await fn(); return [r, Date.now() - t]; };
   const lang = detectLang(question, body.lang);
   const session = String(body.session || "").replace(/[^A-Za-z0-9-]/g, "").slice(0, 64);
   const msg = (rail) => (lang === "es" && MESSAGES_ES[rail]) || MESSAGES[rail];
   const blocked = (rail, categories = []) =>
-    json(200, { ok: true, blocked: rail, answer: msg(rail), categories, checks, lang });
+    json(200, { ok: true, blocked: rail, answer: msg(rail), categories, checks, lang, ms: Date.now() - started });
 
   // Sends a staff alert on a channel if configured. On Netlify, waitUntil lets it finish after the reply is sent.
   const dispatch = async (channel, rail, category) => {
@@ -385,7 +388,7 @@ export async function handler(req, deps = {}) {
       const support = supportResponse(topic, lang);
       const a = topic === "crisis" ? await dispatch("counselor", rail, "Suicide and Self Harm") : { status: "not_applicable", reference: (globalThis.crypto?.randomUUID?.() || String(Date.now())).slice(0, 8).toUpperCase() };
       checks.push({ rail: "support_response", topic, decision: "block", categories, alert: a.status });
-      return json(200, { ok: true, blocked: topic === "crisis" ? "crisis" : "support", topic, answer: support.message, support, categories, reference: a.reference, checks, lang });
+      return json(200, { ok: true, blocked: topic === "crisis" ? "crisis" : "support", topic, answer: support.message, support, categories, reference: a.reference, checks, lang, ms: Date.now() - started });
     }
     return blocked(plainRail, categories);
   };
@@ -396,7 +399,7 @@ export async function handler(req, deps = {}) {
     checks.push({ rail: "pii_input", decision: pii.length ? "block" : "allow", entities: pii });
     if (pii.length) {
       const redacted = redactPII(question);
-      return json(200, { ok: true, blocked: "pii", answer: msg("pii"), categories: pii, checks, lang, ...(redacted ? { redacted } : {}) });
+      return json(200, { ok: true, blocked: "pii", answer: msg("pii"), categories: pii, checks, lang, ms: Date.now() - started, ...(redacted ? { redacted } : {}) });
     }
 
     // Rail 1b: FERPA records request (another person's grades, password, schedule): redirected, never sent to a model
@@ -404,34 +407,42 @@ export async function handler(req, deps = {}) {
     checks.push({ rail: "records_request", decision: records ? "block" : "allow" });
     if (records) return blocked("records_request");
 
+    // Rails 2 and 3 run at the same time: both read only the question, and the answer model is not
+    // called until both verdicts are back. Content safety decides first when both block.
+    const [[cs, msCs], [tc, msTc]] = await Promise.all([
+      timed(() => contentSafety(c, question, null, fetchImpl)),
+      c.topicControl ? timed(() => topicControl(c, question, fetchImpl)) : Promise.resolve([null, 0])
+    ]);
+
     // Rail 2: content safety on input
-    const { verdict: s1, endpoint: e1 } = await contentSafety(c, question, null, fetchImpl);
+    const { verdict: s1, endpoint: e1 } = cs;
     if (!s1) throw new Error("No safety endpoint returned a readable verdict on the question");
-    checks.push({ rail: "content_safety_input", decision: s1.user === "unsafe" ? "block" : "allow", categories: s1.categories, endpoint: e1 });
+    checks.push({ rail: "content_safety_input", decision: s1.user === "unsafe" ? "block" : "allow", categories: s1.categories, endpoint: e1, ms: msCs });
     if (s1.user === "unsafe") return onBlock("content_safety_input", "content_safety", s1.categories);
 
     // Rail 3: topic control on input
     if (c.topicControl) {
-      const { verdict: t, endpoint: e2 } = await topicControl(c, question, fetchImpl);
+      const { verdict: t, endpoint: e2 } = tc;
       if (!t) throw new Error("No safety endpoint returned a readable topic control verdict");
-      checks.push({ rail: "topic_control_input", decision: t.user === "unsafe" ? "block" : "allow", endpoint: e2 });
+      checks.push({ rail: "topic_control_input", decision: t.user === "unsafe" ? "block" : "allow", endpoint: e2, ms: msTc });
       if (t.user === "unsafe") return onBlock("topic_control_input", "topic_control", []);
     }
 
     // Generation
-    const answer = String(await nvidia(c, {
+    const [rawAnswer, msGen] = await timed(() => nvidia(c, {
       model: c.chatModel,
       messages: [{ role: "system", content: SYSTEM + (body.lang === "es" ? LANG_ES : body.lang === "en" ? LANG_EN : "") }, { role: "user", content: question + (body.lang === "es" ? "\n\n(Responda en español.)" : body.lang === "en" ? "\n\n(Answer in English.)" : "") }],
       max_tokens: 400, temperature: 0.3,
       chat_template_kwargs: { enable_thinking: false }
-    }, fetchImpl)).trim();
+    }, fetchImpl));
+    const answer = String(rawAnswer).trim();
     if (!answer) throw new Error("Empty answer");
 
     // Rail 4: content safety on output (question + answer together)
-    const { verdict: s2, endpoint: e3 } = await contentSafety(c, question, answer, fetchImpl);
+    const [{ verdict: s2, endpoint: e3 }, msOut] = await timed(() => contentSafety(c, question, answer, fetchImpl));
     if (!s2 || !s2.response) throw new Error("No safety endpoint returned a readable verdict on the answer");
     const outBad = s2.response === "unsafe" || s2.user === "unsafe";
-    checks.push({ rail: "content_safety_output", decision: outBad ? "block" : "allow", categories: s2.categories, endpoint: e3 });
+    checks.push({ rail: "content_safety_output", decision: outBad ? "block" : "allow", categories: s2.categories, endpoint: e3, ms: msOut });
     if (outBad) return onBlock("content_safety_output", "output_safety", s2.categories);
 
     // Rail 5: PII on output
@@ -439,7 +450,7 @@ export async function handler(req, deps = {}) {
     checks.push({ rail: "pii_output", decision: outPii.length ? "block" : "allow", entities: outPii });
     if (outPii.length) return blocked("output_pii", outPii);
 
-    return json(200, { ok: true, answer, checks, lang });
+    return json(200, { ok: true, answer, checks, lang, ms: Date.now() - started, answer_ms: msGen });
   } catch (e) {
     console.error("ask failed:", e?.message || e);
     return json(502, { ok: false, error: msg("unavailable") });
