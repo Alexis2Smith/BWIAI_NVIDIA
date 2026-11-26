@@ -13,7 +13,7 @@
 <style>
 .devbar{background:#B42318;color:#fff;text-align:center;font:700 14px Montserrat,system-ui,sans-serif;padding:8px 16px}
 .devnote{max-width:1120px;margin:24px auto 0;padding:0 20px;color:var(--muted,#5B6675);font-size:15px}
-.rails{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:0 0 18px}
+.rails{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:0 0 18px}
 .rail{background:#fff;border:1px solid var(--line,#DCE3F0);border-radius:10px;padding:10px 12px;font-size:13.5px}
 .rail b{display:block;font:700 13px Montserrat,system-ui,sans-serif;color:var(--navy,#0E2865)}
 .rail span{color:var(--muted,#5B6675)}
@@ -51,20 +51,21 @@
   </div>
 </header>
 <main>
-<p class="devnote">Dev test page for Ask the Institute with 3 NVIDIA-pattern guardrails. Health check: <a href="/.netlify/functions/ping">/.netlify/functions/ping</a>. Use the cohort test scenarios to reproduce the Week 3 notebook results.</p>
+<p class="devnote">Dev test page for Ask the Institute with 6 guardrails, 3 of them NVIDIA Nemotron safety checks. Health check: <a href="/.netlify/functions/ping">/.netlify/functions/ping</a>. Use the cohort test scenarios to reproduce the Week 3 notebook results.</p>
 
 <section class="div" id="ask">
   <div class="wrap">
     <div class="div-head">
       <div><div class="div-num">Try It Now &middot; Ask the Institute</div><h2>Ask an AI governance question, safely</h2></div>
-      <p>Every question passes 3 guardrails before the AI sees it, and every answer is checked again before you see it. Built with <b>NVIDIA Nemotron</b> models, following the NeMo Guardrails combined design.</p>
+      <p>Every question passes 4 guardrails before the AI sees it, and 2 more check every answer before you see it. Built with <b>NVIDIA Nemotron</b> models, following the NeMo Guardrails combined design.</p>
     </div>
     <div class="rails" aria-label="Guardrails in order">
       <div class="rail"><b>1. PII screen</b><span>Personal identifiers stopped first</span></div>
-      <div class="rail"><b>2. Content safety</b><span>24 harm categories (Aegis)</span></div>
-      <div class="rail"><b>3. Topic control</b><span>AI governance topics only</span></div>
-      <div class="rail"><b>4. Answer safety</b><span>Question and answer screened together</span></div>
-      <div class="rail"><b>5. Answer PII</b><span>No identifiers in replies</span></div>
+      <div class="rail"><b>2. Records request</b><span>Student records requests redirected (FERPA)</span></div>
+      <div class="rail"><b>3. Content safety</b><span>24 harm categories (Aegis)</span></div>
+      <div class="rail"><b>4. Topic control</b><span>AI governance topics only</span></div>
+      <div class="rail"><b>5. Answer safety</b><span>Question and answer screened together</span></div>
+      <div class="rail"><b>6. Answer PII</b><span>No identifiers in replies</span></div>
     </div>
     <div class="ask-card">
       <div class="ask-label">Suggested questions</div>
@@ -166,8 +167,8 @@
             show("flag",'<p class="redact-note">'+esc(T.fixed)+'</p>');
           }); }
         } else {
-          show("good",'<div class="ask-badge">All 5 guardrails passed</div>'+
-            esc(d.answer).split(/\n{2,}/).map(function(p){ return "<p>"+p.replace(/\n/g,"<br>")+"</p>"; }).join("")+trace(d.checks));
+          show("good",'<div class="ask-badge">All '+((d.checks&&d.checks.length)||6)+' guardrails passed</div>'+
+            esc(d.answer).replace(/\*\*([^*\n]+)\*\*/g,"<strong>$1</strong>").split(/\n{2,}/).map(function(p){ return "<p>"+p.replace(/\n/g,"<br>")+"</p>"; }).join("")+trace(d.checks));
         }
       }, function(){ show("bad","<p>The assistant is unavailable right now. Please try again shortly.</p>"); })
       .then(function(){ btn.disabled=false; btn.textContent="Ask the Institute →"; });
