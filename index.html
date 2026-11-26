@@ -642,17 +642,33 @@ body.is-cohort .cohort{display:block}
       var t=n.matches(".care-list li")?Array.prototype.map.call(n.children,function(c){ return c.textContent.trim(); }).join(", "):n.textContent;
       t=t.replace(/\s+/g," ").trim(); if(t){ parts.push(/[.!?:]$/.test(t)?t:t+"."); } });
     return parts.join(" "); }
-  function pickVoice(){ var vs=synth.getVoices(), want=voiceLang().toLowerCase(), base=want.slice(0,2);
-    return vs.filter(function(v){ return v.lang.toLowerCase()===want; })[0]||vs.filter(function(v){ return v.lang.toLowerCase().indexOf(base)===0; })[0]||null; }
+  // Picks the most natural-sounding voice the device offers: neural or premium voices first
+  // (Microsoft "Natural" voices in Edge, "Premium"/"Enhanced" voices on Apple devices, Google voices in Chrome),
+  // never novelty voices, and older system voices only as a last resort.
+  var NOVELTY=/Albert|Bad News|Bahh|Bells|Boing|Bubbles|Cellos|Eddy|Flo|Fred|Good News|Grandma|Grandpa|Jester|Junior|Organ|Ralph|Reed|Rocko|Sandy|Shelley|Superstar|Trinoids|Whisper|Wobble|Zarvox|Kathy/i;
+  function voiceScore(v,want){ var n=v.name, l=(v.lang||"").toLowerCase().replace("_","-"), s=0;
+    if(l.slice(0,2)!==want.slice(0,2)) return -1e4;
+    if(NOVELTY.test(n)) return -1e3;
+    if(l===want) s+=30; else if(want==="es-us"&&l==="es-mx") s+=20; else if(want==="en-us"&&/en-(gb|ca|au)/.test(l)) s+=5;
+    if(/natural|neural/i.test(n)) s+=120; if(/premium/i.test(n)) s+=110; if(/enhanced|siri/i.test(n)) s+=90;
+    if(/online/i.test(n)) s+=60; if(/^google/i.test(n)) s+=70; if(/^microsoft/i.test(n)) s+=20;
+    return s; }
+  function pickVoice(){ var want=voiceLang().toLowerCase(), best=null, bs=-1e9;
+    synth.getVoices().forEach(function(v){ var sc=voiceScore(v,want); if(sc>bs){ bs=sc; best=v; } });
+    return bs>-1e3?best:null; }
+  // Splits long answers into sentences so the voice sounds natural and does not cut off (a known Chrome limit).
+  function chunks(text){ var out=[], cur=""; (text.match(/[^.!?]+[.!?]+["')\]]*\s*|[^.!?]+$/g)||[text]).forEach(function(sn){
+      if((cur+sn).length>220&&cur){ out.push(cur.trim()); cur=""; } cur+=sn; }); if(cur.trim()) out.push(cur.trim()); return out; }
   function stopSpeech(){ if(synth){ synth.cancel(); } speaking=false; var lb=document.getElementById("listenBtn"); if(lb){ lb.setAttribute("aria-pressed","false"); lb.lastChild.textContent=UI[lang].listen; } }
   function listenBtn(){ return synth?'<button type="button" class="listen" id="listenBtn" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg><span>'+esc(UI[lang].listen)+'</span></button>':""; }
   function wireListen(){ var lb=document.getElementById("listenBtn"); if(!lb) return;
     lb.addEventListener("click",function(){
       if(speaking){ stopSpeech(); return; }
       var body=out.querySelector(".rep-body"); var text=plain(body); if(!text) return;
-      synth.cancel(); var u=new SpeechSynthesisUtterance(text); u.lang=voiceLang(); var v=pickVoice(); if(v) u.voice=v; u.rate=0.95;
-      u.onend=u.onerror=function(){ stopSpeech(); };
-      speaking=true; lb.setAttribute("aria-pressed","true"); lb.lastChild.textContent=UI[lang].stopListen; synth.speak(u);
+      synth.cancel(); var v=pickVoice(), parts=chunks(text);
+      speaking=true; lb.setAttribute("aria-pressed","true"); lb.lastChild.textContent=UI[lang].stopListen;
+      parts.forEach(function(t,i){ var u=new SpeechSynthesisUtterance(t); u.lang=v?v.lang:voiceLang(); if(v) u.voice=v; u.rate=1; u.pitch=1;
+        u.onerror=function(){ stopSpeech(); }; if(i===parts.length-1) u.onend=function(){ stopSpeech(); }; synth.speak(u); });
     }); }
   if(synth&&synth.onvoiceschanged!==undefined){ synth.onvoiceschanged=function(){}; }
   var PILL={good:["st-ok","stOk"],flag:["st-block","stBlock"],redirect:["st-redirect","stRedirect"],care:["st-care","stCare"],wait:["st-care","stWait"],bad:["st-block","stBad"]};
