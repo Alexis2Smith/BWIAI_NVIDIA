@@ -381,4 +381,16 @@ console.log("Speed and timing");
   ok("fails closed: no answer when the topic verdict is unreadable, and the answer model is never called");
 }
 
+console.log("Spanish word order");
+{
+  assert.ok(detectPII("La contraseña de mi hija es Sol2026. ¿Qué herramientas de IA son seguras?").includes("password"));
+  assert.ok(detectPII("The password for my son is Tiger2026").includes("password"));
+  assert.ok(detectPII("Mi número de estudiante es 2045831.").includes("student_id"));
+  assert.ok(detectPII("código de alumna: 774512").includes("student_id"));
+  assert.deepEqual(detectPII("La contraseña de la escuela es segura?"), []);
+  assert.deepEqual(detectPII("¿Qué política de contraseñas debe tener el distrito?"), []);
+  assert.deepEqual(detectPII("The password of the district is strong enough?"), []);
+  ok("Spanish passwords and student numbers are caught in natural word order; policy questions are not flagged");
+}
+
 console.log(`\nALL ${n} TESTS PASSED`);
