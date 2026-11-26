@@ -43,14 +43,14 @@ function outcome(b, status) {
   return b.blocked || "answered";
 }
 
-export async function runEval(ask) {
+export async function runEval(ask, pause = 300) {
   const rows = [];
   for (const [group, expected, label, q] of CASES) {
     const t0 = Date.now();
     const { body, status } = await ask(q);
     const got = outcome(body, status);
     rows.push({ group, label, expected, got, pass: got === expected, ms: Date.now() - t0, lang: body?.lang, categories: body?.categories || [], answer: String(body?.answer || "").slice(0, 90) });
-    await new Promise((r) => setTimeout(r, 300));
+    if (pause) await new Promise((r) => setTimeout(r, pause));
   }
   return rows;
 }
