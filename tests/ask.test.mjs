@@ -345,6 +345,8 @@ console.log("Language switch");
   const askL = async (q, lang, s) => { const r = await handler(new Request("https://s/.netlify/functions/ask", { method: "POST", body: JSON.stringify({ question: q, lang }) }), { fetch: s.fetch, cfg: c }); return { status: r.status, body: await r.json() }; };
   const s1 = sim(); await askL("What should a school board ask before approving an AI tool?", "es", s1);
   assert.ok(s1.calls.find((x) => x.kind === "chat").body.messages[0].content.includes("Write the entire answer in Spanish"));
+  assert.ok(s1.calls.find((x) => x.kind === "chat").body.messages[1].content.endsWith("(Responda en español.)"));
+  assert.ok(s1.calls.filter((x) => x.kind !== "chat").every((x) => !JSON.stringify(x.body).includes("Responda en español")));
   const s2 = sim(); await askL("¿Qué debe preguntar una junta escolar antes de aprobar una herramienta de IA?", "en", s2);
   assert.ok(s2.calls.find((x) => x.kind === "chat").body.messages[0].content.includes("Write the entire answer in English"));
   const s3 = sim(); await ask("What should a school board ask?", s3);
