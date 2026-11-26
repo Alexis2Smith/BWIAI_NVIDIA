@@ -191,8 +191,8 @@ const PII_PATTERNS = [
   // so these are anchored on the words people use when sharing them.
   // A shared password needs an explicit separator ("my password is X", "pwd: X"), so policy questions such as
   // "password resets" or "password sharing" are not flagged.
-  { type: "password", re: /\b(?:password|passwd|pwd|passcode|pass code|contrase[nñ]a|clave)\b\s*(?:is|was|=|:|es)\s*["'“]?[^\s"'”]{4,}/i, check: (m) => !/(?:is|was|=|:|es)\s*["'“]?(?:resets?|polic(?:y|ies)|managers?|requirements?|rules?|strong|weak|safe|secure|important|required|changed|expired|reused|shared|private|protected|the|a|an|my|your|our|their|not|too|still|seguras?|importante)\b/i.test(m[0]) },
-  { type: "student_id", re: /\b(?:student|pupil|school|estudiante|alumno)\s*(?:id|identification|number|no\.?|#|n[uú]mero)\b[\s:#.-]*(?:is|es)?[\s:#.-]*[A-Z]{0,3}\d{4,10}\b/i },
+  { type: "password", re: /\b(?:password|passwd|pwd|passcode|pass code|contrase[nñ]a|clave)(?:\s+(?:de|del|for|of)\s+(?:(?:mi|mis|su|tu|my|his|her|their|our|the|el|la)\s+)?[\p{L}']+)?\s*(?:is|was|=|:|es)\s*["'“]?[^\s"'”]{4,}/iu, check: (m) => !/(?:is|was|=|:|es)\s*["'“]?(?:resets?|polic(?:y|ies)|managers?|requirements?|rules?|strong|weak|safe|secure|important|required|changed|expired|reused|shared|private|protected|the|a|an|my|your|our|their|not|too|still|seguras?|importante)\b/i.test(m[0]) },
+  { type: "student_id", re: /\b(?:(?:student|pupil|school|estudiante|alumno)\s*(?:id|identification|number|no\.?|#|n[uú]mero)|(?:n[uú]mero|c[oó]digo|id)\s+de\s+(?:estudiante|alumn[oa]))\b[\s:#.-]*(?:is|es)?[\s:#.-]*[A-Z]{0,3}\d{4,10}\b/i },
   { type: "lunch_pin", re: /\b(?:(?:lunch|cafeteria|meal|lunch account|comedor|almuerzo)\s*(?:pin|code|number|n[uú]mero|c[oó]digo)|(?:pin|c[oó]digo|n[uú]mero)\s+(?:del?|para el)\s+(?:almuerzo|comedor))\b[\s:#.-]*(?:is|es)?[\s:#.-]*\d{3,8}\b/i }
 ];
 
