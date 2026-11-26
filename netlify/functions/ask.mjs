@@ -46,6 +46,7 @@
 // configured safety endpoint fails, no answer is shown.
 
 import { detectLang, classify, supportResponse, MESSAGES_ES } from "../../lib/support.mjs";
+import { metricsStore, record, askEvent } from "../../lib/metrics.mjs";
 
 const MAX_Q = 600;
 
@@ -338,7 +339,24 @@ export const MESSAGES = {
   unavailable: "The assistant is unavailable right now. Please try again shortly, or email assessments@ascendainow.com."
 };
 
+// Records an anonymous usage event for every question (never the question text), then returns the response.
+// On Netlify the write finishes after the reply is sent, so metrics never slow the person down or change the answer.
 export async function handler(req, deps = {}) {
+  let reqBody = {};
+  try { reqBody = await req.clone().json(); } catch { /* the guardrail handler reports bad input */ }
+  const res = await respond(req, deps);
+  if (reqBody.website || res.status === 400) return res; // bots caught by the honeypot, empty or too-long questions
+  const store = await metricsStore(deps);
+  if (!store) return res;
+  const task = (async () => {
+    try { await record(store, "ask", askEvent(reqBody, res.status, await res.clone().json())); }
+    catch (e) { console.error("Metrics:", e?.message || e); }
+  })();
+  if (typeof deps.context?.waitUntil === "function") deps.context.waitUntil(task); else await task;
+  return res;
+}
+
+async function respond(req, deps = {}) {
   const fetchImpl = deps.fetch || fetch;
   const c = deps.cfg || cfg();
   if (req.method !== "POST") return json(405, { ok: false });
